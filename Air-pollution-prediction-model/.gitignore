@@ -1,0 +1,9 @@
+node_modules/
+package.json
+package-lock.json
+create_docx.js
+~$*
+__pycache__/
+*.pyc
+Thesis_Summary.docx
+
