@@ -11,13 +11,15 @@ A single home for all my AI projects — and the source for my portfolio site.
 ### Agentic systems — [`n8n/`](n8n)
 
 Production automation built in n8n. Each folder has a write-up of how the system works and why it
-is built that way, plus a sanitised workflow export where one is available.
+is built that way, plus sanitised workflow exports — **11 importable workflows, 191 nodes**, for
+every system except Media Clippings (not exposed for programmatic export) and the Lead Intelligence
+research sub-workflows.
 
 | Project | What it does |
 |---|---|
 | [Internal Audit Report Drafter](n8n/iard-audit-report-drafter) | Audit artefacts → formatted draft Word report, refined by chat, with a real approval gate |
 | [Opportunity Radar](n8n/opportunity-radar) | 12-stage research pipeline: ingest → abstract → pgvector retrieval → knockout → weighted scoring → one-pagers |
-| [Employee Engagement Pulse](n8n/engagement-pulse) | Weekly check-in with AI severity triage, escalation and a 2-day reminder sweep — **full export included** |
+| [Employee Engagement Pulse](n8n/engagement-pulse) | Weekly check-in with AI severity triage, escalation and a 2-day reminder sweep |
 | [Risk & Control Matrix Builder](n8n/rcm-builder) | Engagement intake → Drive corpus → FastAPI generation → reviewer approval |
 | [CreatorOS](n8n/creatoros-content-pipeline) | Five-agent content pipeline with structured-output contracts and a Slack send-and-wait gate |
 | [Automated Media Clippings](n8n/media-clippings) | Daily Brave sweep, agent selection, human curation, dedicated error handling |

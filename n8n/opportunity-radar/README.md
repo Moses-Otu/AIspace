@@ -8,6 +8,13 @@ Built in n8n over Postgres with pgvector. Two isolated instances of the same pip
 parallel — a production instance and a federal pilot writing to its own `*_federal` tables — so
 the pivot could be tested without touching the working end-to-end system.
 
+**Sanitised exports** — the two stages that carry the interesting logic:
+[Stage 8 — retrieve, contextualize, knockout, score](stage-08-retrieve-contextualize-knockout.workflow.json)
+(19 nodes) and
+[Stage 11 — generate one-pagers](stage-11-generate-one-pagers.workflow.json) (9 nodes).
+Both expect the `ideas`, `kb_docs` and `kb_index` tables described below, with pgvector enabled.
+The ingestion, embedding and reporting stages are documented here but not exported.
+
 > Client and geography identifiers have been anonymised. The firm is referred to as *the firm*;
 > the retrieval corpus is described as a *national policy corpus*.
 

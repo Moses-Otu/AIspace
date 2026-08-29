@@ -1,0 +1,226 @@
+{
+  "name": "IARD - 04 Sub-workflow: Document Assembly",
+  "nodes": [
+    {
+      "parameters": { "inputSource": "passthrough" },
+      "id": "78a60abf-fd7f-4802-b643-a2e4a59b866b",
+      "name": "When Executed (by Orchestrator or on-demand 'regenerate')",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [-256, 160]
+    },
+    {
+      "parameters": {
+        "filters": {
+          "conditions": [
+            { "condition": "eq", "keyName": "engagement_id", "keyValue": "={{ $json.engagement_id || $json.id }}" }
+          ]
+        },
+        "matchType": "allFilters",
+        "operation": "getAll",
+        "resource": "row",
+        "returnAll": true,
+        "tableId": "observation"
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [0, 0],
+      "id": "8baeb7c9-2464-4a3e-8146-931f6f287637",
+      "name": "Get Observations"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "appendix_item",
+        "returnAll": true
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [0, 160],
+      "id": "87e40224-4132-4a63-abc8-84f2bdb0b88d",
+      "name": "Get Appendix Items"
+    },
+    {
+      "parameters": {
+        "filters": {
+          "conditions": [
+            { "condition": "eq", "keyName": "id", "keyValue": "={{ $json.engagement_id || $json.id }}" }
+          ]
+        },
+        "limit": 1,
+        "matchType": "allFilters",
+        "operation": "getAll",
+        "resource": "row",
+        "tableId": "engagement"
+      },
+      "id": "1a064d3a-45c1-4b41-97a5-18fbeb489f7f",
+      "name": "Get Engagement",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [0, 320]
+    },
+    {
+      "id": "bf25d346-c130-4666-b240-9f4c40df3019",
+      "name": "Get Observation Root Causes",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [0, 480],
+      "parameters": {
+        "operation": "getAll",
+        "resource": "row",
+        "returnAll": true,
+        "tableId": "observation_root_cause"
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const observations = $input.all().map(i => i.json).sort((a, b) => (a.sequence_no ?? 0) - (b.sequence_no ?? 0));\nreturn [{ json: { observations } }];"
+      },
+      "id": "752a7892-6633-4695-a2e0-f762e0665481",
+      "name": "Collect Observations",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [272, -16]
+    },
+    {
+      "parameters": {
+        "jsCode": "const obsIds = new Set($('Get Observations').all().map(i => i.json.id));\nconst appendix_items = $input.all().map(i => i.json).filter(a => obsIds.has(a.observation_id));\nreturn [{ json: { appendix_items } }];"
+      },
+      "id": "3030a0af-f437-42f0-9758-3002942ea7df",
+      "name": "Collect Appendix Items",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [256, 160]
+    },
+    {
+      "id": "94ea09ff-ac1d-4625-b799-8f8f5728e440",
+      "name": "Collect Root Causes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [272, 480],
+      "parameters": {
+        "jsCode": "// v0.2: root causes are now their own table (observation_root_cause), plural per observation,\n// each tagged People/Process/Technology with its own explanation. Fetches all rows (Supabase's\n// filter condition set has no 'in' operator, same constraint hit elsewhere in this build) and\n// keeps only causes belonging to observations actually in this engagement, grouped by observation_id\n// so Build Render Payload can attach each observation's cause list directly.\nconst obsIds = new Set($('Get Observations').all().map(i => i.json.id));\nconst rows = $input.all().map(i => i.json).filter(rc => obsIds.has(rc.observation_id));\nconst grouped = {};\nfor (const rc of rows) {\n  if (!grouped[rc.observation_id]) grouped[rc.observation_id] = [];\n  grouped[rc.observation_id].push({\n    category_people: !!rc.category_people,\n    category_process: !!rc.category_process,\n    category_technology: !!rc.category_technology,\n    explanation: rc.explanation,\n    flagged: !!rc.flagged\n  });\n}\nreturn [{ json: { root_causes_by_observation: grouped } }];"
+      }
+    },
+    {
+      "parameters": {
+        "combineBy": "combineByPosition",
+        "mode": "combine",
+        "numberInputs": 4,
+        "options": { "includeUnpaired": true }
+      },
+      "id": "9bb3cd15-7a39-444c-9df4-26b4006372c4",
+      "name": "Merge Render Inputs",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [512, 160]
+    },
+    {
+      "parameters": {
+        "jsCode": "const merged = $input.first().json;\nconst front_matter = typeof merged.front_matter === 'string' ? JSON.parse(merged.front_matter) : merged.front_matter;\nconst rootCausesByObs = merged.root_causes_by_observation || {};\nconst observations = (merged.observations || []).map(o => ({\n  ...o,\n  root_causes: rootCausesByObs[o.id] || []\n}));\nreturn [{ json: {\n  engagement_id: merged.id,\n  front_matter,\n  observations,\n  appendix_items: merged.appendix_items || []\n} }];"
+      },
+      "id": "524f368e-891d-4b25-bb7a-605c99778413",
+      "name": "Build Render Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [768, 160]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $vars.RENDER_SERVICE_URL }}/render-report",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "response": { "response": { "responseFormat": "file" } }
+        }
+      },
+      "id": "676653dd-9ea3-4527-a970-09226a95a139",
+      "name": "Render Word Document via IARD Render Service",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1024, 160],
+      "notes": "Calls the self-hosted Python render service (FastAPI + python-docx). Set RENDER_SERVICE_URL as an n8n variable."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Lightweight real check (full GR-02 structural diff vs template still to be built):\n// confirm the render service actually returned a non-empty document.\nconst item = $input.first();\nconst binary = item.binary?.data;\nif (!binary || !binary.fileSize || Number(binary.fileSize) === 0) {\n  throw new Error('Render service returned an empty or missing document.');\n}\nreturn [item];"
+      },
+      "id": "81f91638-9f84-401e-ba0f-2443b8c71bba",
+      "name": "Validate Template Fidelity",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1008, 0]
+    },
+    {
+      "parameters": {
+        "tableId": "change_log",
+        "fieldsUi": {
+          "fieldValues": [
+            { "fieldId": "engagement_id", "fieldValue": "={{ $('Build Render Payload').first().json.engagement_id }}" },
+            { "fieldId": "actor", "fieldValue": "agent" },
+            { "fieldId": "action", "fieldValue": "generate" }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1232, 0],
+      "id": "35e84c16-ca3f-4ae3-b635-2cc5d5f71c78",
+      "name": "Log Generation to Change Log"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Derived sections, rebuilt fresh on every generation (content rule; FR-04/FR-13):\n// - Table of Contents with correct page numbers\n// - List of Audit Issues: number, risk letter/colour, hyperlinked title, page; owner/target date left blank in draft\n// - Audit Issues Dashboard: business areas pre-filled, counts left blank for the auditor\n// area_for_improvement observations are EXCLUDED from both the dashboard counts and the issue list (FR-26).\nconst obs = $input.all().map(i => i.json);\nconst listable = obs.filter(o => o.risk_rating !== 'area_for_improvement');\nconst listOfIssues = listable.map((o, idx) => ({\n  no: idx + 1, risk_letter: o.risk_rating, title: o.title, hyperlink_target: o.id, page: null, owner: null, target_date: null\n}));\nreturn [{ json: { list_of_audit_issues: listOfIssues, observation_count: obs.length } }];"
+      },
+      "id": "acf4c3de-adeb-42ca-af2b-8a6b8aedd169",
+      "name": "Build Derived Sections",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [496, -112],
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Placeholder: assign a stable bookmark/content-control id per rendered observation paragraph.\nfor (const item of $input.all()) {\n  item.json.paragraph_id = item.json.id;\n}\nreturn $input.all();"
+      },
+      "id": "671b98e2-8031-4c0f-af69-f02068c8f06c",
+      "name": "Assign Stable Paragraph IDs (for round-trip mapping)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [688, -112],
+      "disabled": true,
+      "notes": "Each rendered observation paragraph gets a bookmark/content-control tagged with its observation.id, so a later re-uploaded Word file can be diffed back to specific rows (feeds the Round-trip Reconciliation sub-workflow)."
+    }
+  ],
+  "connections": {
+    "When Executed (by Orchestrator or on-demand 'regenerate')": {
+      "main": [
+        [
+          { "node": "Get Observations", "type": "main", "index": 0 },
+          { "node": "Get Appendix Items", "type": "main", "index": 0 },
+          { "node": "Get Engagement", "type": "main", "index": 0 },
+          { "node": "Get Observation Root Causes", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Get Observations": { "main": [[{ "node": "Collect Observations", "type": "main", "index": 0 }]] },
+    "Get Appendix Items": { "main": [[{ "node": "Collect Appendix Items", "type": "main", "index": 0 }]] },
+    "Get Observation Root Causes": { "main": [[{ "node": "Collect Root Causes", "type": "main", "index": 0 }]] },
+    "Collect Observations": { "main": [[{ "node": "Merge Render Inputs", "type": "main", "index": 0 }]] },
+    "Collect Appendix Items": { "main": [[{ "node": "Merge Render Inputs", "type": "main", "index": 1 }]] },
+    "Get Engagement": { "main": [[{ "node": "Merge Render Inputs", "type": "main", "index": 2 }]] },
+    "Collect Root Causes": { "main": [[{ "node": "Merge Render Inputs", "type": "main", "index": 3 }]] },
+    "Merge Render Inputs": { "main": [[{ "node": "Build Render Payload", "type": "main", "index": 0 }]] },
+    "Build Render Payload": { "main": [[{ "node": "Render Word Document via IARD Render Service", "type": "main", "index": 0 }]] },
+    "Render Word Document via IARD Render Service": { "main": [[{ "node": "Validate Template Fidelity", "type": "main", "index": 0 }]] },
+    "Validate Template Fidelity": { "main": [[{ "node": "Log Generation to Change Log", "type": "main", "index": 0 }]] },
+    "Build Derived Sections": { "main": [[{ "node": "Assign Stable Paragraph IDs (for round-trip mapping)", "type": "main", "index": 0 }]] }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "description": "Gathers observations, root causes, appendix items and front matter, renders the Word report via the FastAPI service, validates the result and logs the generation. Sanitised: credentials removed, client identifiers anonymised."
+}

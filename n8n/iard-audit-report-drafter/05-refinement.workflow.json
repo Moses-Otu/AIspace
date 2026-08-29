@@ -1,0 +1,315 @@
+{
+  "name": "IARD - 05 Sub-workflow: Refinement (Detailed Audit Issues only)",
+  "nodes": [
+    {
+      "parameters": { "inputSource": "passthrough" },
+      "id": "948d4be2-97ab-4e42-b488-4aec5ef2c512",
+      "name": "When Executed by Orchestrator",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [-1936, 352]
+    },
+    {
+      "parameters": {
+        "model": { "__rl": true, "cachedResultName": "gpt-4.1", "mode": "list", "value": "gpt-4.1" },
+        "builtInTools": {},
+        "options": {}
+      },
+      "id": "98502c11-2035-4a00-aee4-a0fdbd29c40d",
+      "name": "OpenAI Chat Model (Classifier)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [-1744, 480]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Classify this audit-report editing instruction. Respond with ONLY strict JSON, no other text, in this exact shape: {\"action\": \"merge|split|reword|re-rate|attach_evidence|move_to_appendix|approve|query_status|other\", \"observation_ids\": [\"...\"]}\n\nMessage: {{ $json.chatInput }}"
+      },
+      "id": "325bf278-36c6-40e7-bb47-c4649dc4e41c",
+      "name": "LLM: Classify Instruction",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.5,
+      "position": [-1728, 336],
+      "notes": "Scoped strictly to Section 7 (Detailed Audit Issues) — this sub-workflow does not accept edits to background, front matter, or appendices outside an observation's own appendix items."
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json.text ?? $input.first().json.output ?? '';\nlet parsed;\ntry {\n  parsed = JSON.parse(raw.trim().replace(/^```json\\n?|```$/g, ''));\n} catch (e) {\n  throw new Error('Could not parse classification JSON: ' + raw);\n}\nreturn [{ json: parsed }];"
+      },
+      "id": "52eff3b2-a7ac-4917-92d7-bc3d3f78e51c",
+      "name": "Parse Classification",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-1408, 336]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "observation",
+        "returnAll": true,
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            { "keyName": "id", "condition": "eq", "keyValue": "={{ $json.observation_ids[0] }}" }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [-1216, 336],
+      "id": "b49a274a-7b24-4272-b77d-d3b32ef5114a",
+      "name": "Get Referenced Observations"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "engagement",
+        "returnAll": true,
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            { "keyName": "id", "condition": "eq", "keyValue": "={{ $json.engagement_id }}" }
+          ]
+        }
+      },
+      "id": "62bd30b9-9081-43a0-bff7-c8af3874b4e3",
+      "name": "Get Engagement Status",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [-1040, 336]
+    },
+    {
+      "parameters": {
+        "jsCode": "// v0.2: approval moved to the engagement level (single approval on the whole report),\n// replacing the old per-observation approval_status/frozen column, which the schema migration\n// dropped. This attaches the parent engagement's current status onto every referenced\n// observation item so the downstream IF can gate on it, without losing any observation fields.\nconst engagementStatus = $input.first()?.json?.status;\nconst observations = $('Get Referenced Observations').all();\nreturn observations.map(item => ({ json: { ...item.json, engagement_status: engagementStatus } }));"
+      },
+      "id": "21d1f8d3-cb2d-4163-931b-033fbb3db976",
+      "name": "Merge Engagement Status onto Observation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-848, 336]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.engagement_status }}",
+              "operator": { "operation": "equals", "type": "string" },
+              "rightValue": "final"
+            }
+          ],
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 1 }
+        },
+        "options": {}
+      },
+      "id": "9621fa5c-4654-42f4-9146-fd7cfb3daf30",
+      "name": "IF: Engagement Already Final?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [-672, 336]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { response: \"This report has already been approved and finalized (GR-01) and can no longer be edited. Un-finalizing is not supported in this pilot.\" } }];"
+      },
+      "id": "50b480f7-e779-4565-92bd-31120c1f1df5",
+      "name": "Respond: Cannot Edit — Report Already Final",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-544, 16]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            { "conditions": { "combinator": "and", "conditions": [{ "leftValue": "={{ $json.action }}", "operator": { "operation": "equals", "type": "string" }, "rightValue": "merge" }], "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 1 } } },
+            { "conditions": { "combinator": "and", "conditions": [{ "leftValue": "={{ $json.action }}", "operator": { "operation": "equals", "type": "string" }, "rightValue": "split" }], "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 1 } } },
+            { "conditions": { "combinator": "and", "conditions": [{ "leftValue": "={{ $json.action }}", "operator": { "operation": "equals", "type": "string" }, "rightValue": "reword" }], "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 1 } } },
+            { "conditions": { "combinator": "and", "conditions": [{ "leftValue": "={{ $json.action }}", "operator": { "operation": "equals", "type": "string" }, "rightValue": "re-rate" }], "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 1 } } },
+            { "conditions": { "combinator": "and", "conditions": [{ "leftValue": "={{ $json.action }}", "operator": { "operation": "equals", "type": "string" }, "rightValue": "attach_evidence" }], "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 1 } } },
+            { "conditions": { "combinator": "and", "conditions": [{ "leftValue": "={{ $json.action }}", "operator": { "operation": "equals", "type": "string" }, "rightValue": "move_to_appendix" }], "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 1 } } },
+            { "conditions": { "combinator": "and", "conditions": [{ "leftValue": "={{ $json.action }}", "operator": { "operation": "equals", "type": "string" }, "rightValue": "approve" }], "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 1 } } },
+            { "conditions": { "combinator": "and", "conditions": [{ "leftValue": "={{ $json.action }}", "operator": { "operation": "equals", "type": "string" }, "rightValue": "query_status" }], "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 1 } } }
+          ]
+        },
+        "options": {}
+      },
+      "id": "25864b3b-f6e3-413c-b290-eae727e92c85",
+      "name": "Switch: Route by Instruction Type",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [-448, 256]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Merge two+ observations into one. Combines criteria/condition/cause/risk/recommendation via LLM\n// with the merged sources still tracked in source_refs; original sequence_nos retired.\nreturn $input.all();"
+      },
+      "id": "a40b9ff2-2b6b-4983-87b3-3808603482a1",
+      "name": "Apply: Merge",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [0, -64]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Split one observation into two+ new rows, each inheriting a subset of source_refs.\nreturn $input.all();"
+      },
+      "id": "11700d4e-6288-4164-aeec-9dc9140d5452",
+      "name": "Apply: Split",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [0, 80]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Reword content per instruction. Still grounded to existing source_refs — GR-03 applies to edits too, not just first drafts.\nreturn $input.all();"
+      },
+      "id": "47bd28f2-3a77-47e0-b261-5055150b2b4f",
+      "name": "Apply: Reword",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [0, 272]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Update risk_rating; observation table colour/label follow automatically at render time.\nreturn $input.all();"
+      },
+      "id": "03aea491-473d-45d9-9b43-8ee4971863d3",
+      "name": "Apply: Re-rate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [0, 416]
+    },
+    {
+      "parameters": {
+        "tableId": "appendix_item",
+        "fieldsUi": {
+          "fieldValues": [
+            { "fieldId": "observation_id", "fieldValue": "={{ $('Parse Classification').first().json.observation_ids[0] }}" },
+            { "fieldId": "appendix_number", "fieldValue": "TBD" },
+            { "fieldId": "content_ref", "fieldValue": "={{ $('When Executed by Orchestrator').first().json.chatInput }}" },
+            { "fieldId": "direction", "fieldValue": "manual" },
+            { "fieldId": "created_by", "fieldValue": "human" }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [16, 544],
+      "id": "5100670b-949b-4a3a-a764-a60196383ac4",
+      "name": "Apply: Attach Evidence"
+    },
+    {
+      "parameters": {
+        "tableId": "appendix_item",
+        "fieldsUi": {
+          "fieldValues": [
+            { "fieldId": "observation_id", "fieldValue": "={{ $('Parse Classification').first().json.observation_ids[0] }}" },
+            { "fieldId": "appendix_number", "fieldValue": "TBD" },
+            { "fieldId": "content_ref", "fieldValue": "={{ $('When Executed by Orchestrator').first().json.chatInput }}" },
+            { "fieldId": "direction", "fieldValue": "manual" },
+            { "fieldId": "created_by", "fieldValue": "human" }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [16, 672],
+      "id": "da1430b1-57e7-41f9-8d4b-71a9192be401",
+      "name": "Apply: Move to Appendix"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "engagement",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            { "keyName": "id", "condition": "eq", "keyValue": "={{ $json.engagement_id }}" }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            { "fieldId": "status", "fieldValue": "final" },
+            { "fieldId": "finalized_at", "fieldValue": "={{ $now.toISO() }}" }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [16, 816],
+      "id": "ce2a1395-e19c-4696-9c17-a4fe00633e72",
+      "name": "Approve: Finalize Engagement"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Read-only: no mutation, just report current status back to the auditor.\nreturn $input.all();"
+      },
+      "id": "da8b7fc8-93da-4e92-8e80-0b24b0ef80c9",
+      "name": "Apply: Query Status (no-op)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [16, 944]
+    },
+    {
+      "parameters": {
+        "tableId": "change_log",
+        "fieldsUi": {
+          "fieldValues": [
+            { "fieldId": "engagement_id", "fieldValue": "={{ $('Get Referenced Observations').first().json.engagement_id }}" },
+            { "fieldId": "observation_id", "fieldValue": "={{ $('Parse Classification').first().json.observation_ids[0] }}" },
+            { "fieldId": "actor", "fieldValue": "human" },
+            { "fieldId": "action", "fieldValue": "={{ $('Parse Classification').first().json.action }}" }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [544, 368],
+      "id": "09991b60-9654-4811-bc92-a96a428de063",
+      "name": "Log Edit to Change Log"
+    }
+  ],
+  "connections": {
+    "When Executed by Orchestrator": { "main": [[{ "node": "LLM: Classify Instruction", "type": "main", "index": 0 }]] },
+    "OpenAI Chat Model (Classifier)": { "ai_languageModel": [[{ "node": "LLM: Classify Instruction", "type": "ai_languageModel", "index": 0 }]] },
+    "LLM: Classify Instruction": { "main": [[{ "node": "Parse Classification", "type": "main", "index": 0 }]] },
+    "Parse Classification": { "main": [[{ "node": "Get Referenced Observations", "type": "main", "index": 0 }]] },
+    "Get Referenced Observations": { "main": [[{ "node": "Get Engagement Status", "type": "main", "index": 0 }]] },
+    "Get Engagement Status": { "main": [[{ "node": "Merge Engagement Status onto Observation", "type": "main", "index": 0 }]] },
+    "Merge Engagement Status onto Observation": { "main": [[{ "node": "IF: Engagement Already Final?", "type": "main", "index": 0 }]] },
+    "IF: Engagement Already Final?": {
+      "main": [
+        [{ "node": "Respond: Cannot Edit — Report Already Final", "type": "main", "index": 0 }],
+        [{ "node": "Switch: Route by Instruction Type", "type": "main", "index": 0 }]
+      ]
+    },
+    "Switch: Route by Instruction Type": {
+      "main": [
+        [{ "node": "Apply: Merge", "type": "main", "index": 0 }],
+        [{ "node": "Apply: Split", "type": "main", "index": 0 }],
+        [{ "node": "Apply: Reword", "type": "main", "index": 0 }],
+        [{ "node": "Apply: Re-rate", "type": "main", "index": 0 }],
+        [{ "node": "Apply: Attach Evidence", "type": "main", "index": 0 }],
+        [{ "node": "Apply: Move to Appendix", "type": "main", "index": 0 }],
+        [{ "node": "Approve: Finalize Engagement", "type": "main", "index": 0 }],
+        [{ "node": "Apply: Query Status (no-op)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Apply: Merge": { "main": [[{ "node": "Log Edit to Change Log", "type": "main", "index": 0 }]] },
+    "Apply: Split": { "main": [[{ "node": "Log Edit to Change Log", "type": "main", "index": 0 }]] },
+    "Apply: Reword": { "main": [[{ "node": "Log Edit to Change Log", "type": "main", "index": 0 }]] },
+    "Apply: Re-rate": { "main": [[{ "node": "Log Edit to Change Log", "type": "main", "index": 0 }]] },
+    "Apply: Attach Evidence": { "main": [[{ "node": "Log Edit to Change Log", "type": "main", "index": 0 }]] },
+    "Apply: Move to Appendix": { "main": [[{ "node": "Log Edit to Change Log", "type": "main", "index": 0 }]] },
+    "Approve: Finalize Engagement": { "main": [[{ "node": "Log Edit to Change Log", "type": "main", "index": 0 }]] },
+    "Apply: Query Status (no-op)": { "main": [[{ "node": "Log Edit to Change Log", "type": "main", "index": 0 }]] }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "description": "Classifies a free-text auditor instruction into a typed action, refuses edits once the engagement is final, routes to the matching handler and logs every edit. Sanitised: credentials removed, client identifiers anonymised."
+}

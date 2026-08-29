@@ -1,0 +1,662 @@
+{
+  "name": "RCM Builder — Intake, Generate, Approve",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "RCM Builder — New Engagement",
+        "formDescription": "Submit engagement details and per-engagement documents to generate a draft Risk & Control Matrix.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Entity",
+              "fieldType": "dropdown",
+              "fieldName": "entity",
+              "fieldOptions": {
+                "values": [
+                  { "option": "Operating Company A" },
+                  { "option": "Operating Company B" }
+                ]
+              },
+              "requiredField": true
+            },
+            { "fieldLabel": "Audit Name", "fieldName": "audit_name", "requiredField": true },
+            { "fieldLabel": "Reviewer Email (Team Leader who will approve the draft)", "fieldType": "email", "fieldName": "reviewer_email" },
+            { "fieldLabel": "Initial Audit Objectives", "fieldType": "file", "fieldName": "initial_audit_objectives_files", "requiredField": true },
+            { "fieldLabel": "Procedure / Process Document (if any)", "fieldType": "file", "fieldName": "procedure_process_document_files", "multipleFiles": false },
+            { "fieldLabel": "Kick-off Minutes (if any)", "fieldType": "file", "fieldName": "kickoff_minutes_files", "multipleFiles": false },
+            { "fieldLabel": "Previous Audit RCM (if any)", "fieldType": "file", "fieldName": "previous_audit_rcm_files", "multipleFiles": false },
+            { "fieldLabel": "Related Final Audit Report (if any)", "fieldType": "file", "fieldName": "final_audit_report_files", "multipleFiles": false },
+            { "fieldLabel": "Policy / Business Rule Document (if any)", "fieldType": "file", "fieldName": "policy_business_rule_files", "multipleFiles": false }
+          ]
+        },
+        "options": {
+          "respondWithOptions": {
+            "values": {
+              "formSubmittedText": "Submission received. The RCM Builder pipeline is generating your draft Risk & Control Matrix now — the reviewer named above will receive it by email once it is ready, typically within a few minutes."
+            }
+          }
+        }
+      },
+      "id": "e0277add-c7cd-422f-810d-b96e12d2e73c",
+      "name": "RCM Intake Form",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.6,
+      "position": [-2512, 48]
+    },
+
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": { "__rl": true, "mode": "id", "value": "REPLACE_DRIVE_ID_IA_SOP" },
+        "options": {
+          "binaryPropertyName": "ia_sop_methodology_files",
+          "googleFileConversion": { "conversion": { "docsToFormat": "application/vnd.openxmlformats-officedocument.wordprocessingml.document" } }
+        }
+      },
+      "id": "d0e06a79-bafd-4d76-8aa2-7a92451e7314",
+      "name": "Download IA SOP",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [-2224, 48]
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": { "__rl": true, "mode": "id", "value": "REPLACE_DRIVE_ID_DELEGATION_OF_AUTHORITY" },
+        "options": { "binaryPropertyName": "delegation_of_authority_files" }
+      },
+      "id": "0a9cc2bb-1ef7-4a30-ab69-fc5ff2b75d41",
+      "name": "Download Delegation of Authority",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [-1872, 48]
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": { "__rl": true, "mode": "id", "value": "REPLACE_DRIVE_ID_ERM_REGISTER" },
+        "options": {
+          "binaryPropertyName": "erm_register_file",
+          "googleFileConversion": { "conversion": { "sheetsToFormat": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" } }
+        }
+      },
+      "id": "48d5d3f7-1fd3-4179-82d6-6ae4d9731da5",
+      "name": "Download ERM Register",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [-1520, 48]
+    },
+
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": { "__rl": true, "mode": "id", "value": "REPLACE_DRIVE_ID_TR_THIRD_PARTY" },
+        "options": { "binaryPropertyName": "iia_topical_requirement_files_1" }
+      },
+      "id": "58a17254-7e3f-4218-8a75-3902be821fd6",
+      "name": "Download TR — Third Party",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [-1200, 48]
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": { "__rl": true, "mode": "id", "value": "REPLACE_DRIVE_ID_TR_THIRD_PARTY_GUIDE" },
+        "options": { "binaryPropertyName": "iia_topical_requirement_files_2" }
+      },
+      "id": "d5fb6394-aec6-488c-a00e-6c8d236f024b",
+      "name": "Download TR — Third Party User Guide",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [-896, 48]
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": { "__rl": true, "mode": "id", "value": "REPLACE_DRIVE_ID_TR_CYBERSECURITY" },
+        "options": { "binaryPropertyName": "iia_topical_requirement_files_3" }
+      },
+      "id": "96ec245d-8b82-447b-b6a5-62d5f85a3c1f",
+      "name": "Download TR — Cybersecurity",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [-672, 48]
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": { "__rl": true, "mode": "id", "value": "REPLACE_DRIVE_ID_TR_CYBERSECURITY_GUIDE" },
+        "options": { "binaryPropertyName": "iia_topical_requirement_files_4" }
+      },
+      "id": "e7ae174d-3f9d-428b-a784-f23b26181a1d",
+      "name": "Download TR — Cybersecurity User Guide",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [-416, 48]
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": { "__rl": true, "mode": "id", "value": "REPLACE_DRIVE_ID_TR_ORG_RESILIENCE" },
+        "options": { "binaryPropertyName": "iia_topical_requirement_files_5" }
+      },
+      "id": "229029b3-a6b3-4c33-8db4-6a3bf397da00",
+      "name": "Download TR — Org Resilience",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [-192, 48]
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": { "__rl": true, "mode": "id", "value": "REPLACE_DRIVE_ID_TR_ORG_RESILIENCE_GUIDE" },
+        "options": { "binaryPropertyName": "iia_topical_requirement_files_6" }
+      },
+      "id": "55022e73-1dcd-4548-9d31-07a8b0d8bfff",
+      "name": "Download TR — Org Resilience User Guide",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [48, 48]
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": { "__rl": true, "mode": "id", "value": "REPLACE_DRIVE_ID_TR_ORG_BEHAVIOR" },
+        "options": { "binaryPropertyName": "iia_topical_requirement_files_7" }
+      },
+      "id": "6a88a0fd-d710-44c0-9427-36d1edfbaf3b",
+      "name": "Download TR — Org Behavior",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [288, 48]
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": { "__rl": true, "mode": "id", "value": "REPLACE_DRIVE_ID_TR_ORG_BEHAVIOR_GUIDE" },
+        "options": { "binaryPropertyName": "iia_topical_requirement_files_8" }
+      },
+      "id": "0a944329-f87a-41ae-ac31-552589291ee7",
+      "name": "Download TR — Org Behavior User Guide",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [528, 48]
+    },
+
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": { "__rl": true, "mode": "id", "value": "REPLACE_DRIVE_ID_TRIAL_BALANCE_Y1" },
+        "options": {
+          "binaryPropertyName": "trial_balance_data_files_1",
+          "googleFileConversion": { "conversion": { "sheetsToFormat": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" } }
+        }
+      },
+      "id": "fd396f55-7a4e-4fdf-8e32-2c5cd59d54ea",
+      "name": "Download TB — Year 1",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [816, 48]
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": { "__rl": true, "mode": "id", "value": "REPLACE_DRIVE_ID_TRIAL_BALANCE_Y2" },
+        "options": {
+          "binaryPropertyName": "trial_balance_data_files_2",
+          "googleFileConversion": { "conversion": { "sheetsToFormat": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" } }
+        }
+      },
+      "id": "a43a4951-e75e-46fd-a36a-f8fffc2df663",
+      "name": "Download TB — Year 2",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [1152, 48]
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": { "__rl": true, "mode": "id", "value": "REPLACE_DRIVE_ID_GL_HIERARCHY" },
+        "options": {
+          "binaryPropertyName": "gl_account_hierarchy_files_1",
+          "googleFileConversion": { "conversion": { "sheetsToFormat": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" } }
+        }
+      },
+      "id": "19c65672-e8a3-4d67-87a5-bbf491ced078",
+      "name": "Download GL Account Hierarchy",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [1376, 48]
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": { "__rl": true, "mode": "id", "value": "REPLACE_DRIVE_ID_DIM_BUSINESS" },
+        "options": {
+          "binaryPropertyName": "dimension_hierarchy_files_1",
+          "googleFileConversion": { "conversion": { "sheetsToFormat": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" } }
+        }
+      },
+      "id": "7a4bd3ac-c7db-4b9d-bdce-1e71947214f8",
+      "name": "Download Dimension — Business",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [1744, 48]
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": { "__rl": true, "mode": "id", "value": "REPLACE_DRIVE_ID_DIM_COST_CENTER" },
+        "options": {
+          "binaryPropertyName": "dimension_hierarchy_files_2",
+          "googleFileConversion": { "conversion": { "sheetsToFormat": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" } }
+        }
+      },
+      "id": "445e0b76-08eb-41d2-8bf6-b642bf0481b1",
+      "name": "Download Dimension — Cost Center",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [2064, 48]
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": { "__rl": true, "mode": "id", "value": "REPLACE_DRIVE_ID_DIM_LOCATION" },
+        "options": {
+          "binaryPropertyName": "dimension_hierarchy_files_3",
+          "googleFileConversion": { "conversion": { "sheetsToFormat": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" } }
+        }
+      },
+      "id": "66658457-0219-418b-88b6-6e0d6587a701",
+      "name": "Download Dimension — Location",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [2368, 48]
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": { "__rl": true, "mode": "id", "value": "REPLACE_DRIVE_ID_DIM_PRODUCT" },
+        "options": {
+          "binaryPropertyName": "dimension_hierarchy_files_4",
+          "googleFileConversion": { "conversion": { "sheetsToFormat": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" } }
+        }
+      },
+      "id": "ea2aa7da-187b-41a3-a3aa-cfac26098009",
+      "name": "Download Dimension — Product",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [2576, 64]
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": { "__rl": true, "mode": "id", "value": "REPLACE_DRIVE_ID_IMPACT_CRITERIA" },
+        "options": {
+          "binaryPropertyName": "impact_criteria_files",
+          "googleFileConversion": { "conversion": { "sheetsToFormat": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" } }
+        }
+      },
+      "id": "b70c10f0-79f6-44d9-a2f9-0b2443ed527a",
+      "name": "Download Impact Criteria",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [2736, 48]
+    },
+
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const optionalKeys = ['previous_audit_rcm_files', 'final_audit_report_files', 'policy_business_rule_files', 'procedure_process_document_files', 'kickoff_minutes_files'];\nconst binary = $input.item.binary || {};\nfor (const key of optionalKeys) {\n  if (!binary[key]) {\n    binary[key] = {\n      data: '',\n      mimeType: 'application/octet-stream',\n      fileName: '',\n    };\n  }\n}\nreturn { json: $input.item.json, binary };"
+      },
+      "id": "2fe87727-344b-4418-9d5a-80c88bee7851",
+      "name": "Fill Missing Optional Binaries",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2896, 48],
+      "notes": "The multipart POST references every optional binary field by name. A field the auditor left blank does not exist on the item, which fails the whole request — so absent optionals are stubbed as empty binaries."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR-RCM-SERVICE-HOST/rcm/generate",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            { "name": "entity", "value": "={{ $json.entity }}" },
+            { "name": "audit_name", "value": "={{ $json.audit_name }}" },
+            { "name": "process_type", "value": "={{ $json.process_type }}" },
+            { "parameterType": "formBinaryData", "name": "objectives_file", "inputDataFieldName": "initial_audit_objectives_files" },
+            { "parameterType": "formBinaryData", "name": "erm_register_file", "inputDataFieldName": "erm_register_file" },
+            { "parameterType": "formBinaryData", "name": "ia_sop_methodology_files", "inputDataFieldName": "ia_sop_methodology_files" },
+            { "parameterType": "formBinaryData", "name": "delegation_of_authority_files", "inputDataFieldName": "delegation_of_authority_files" },
+            { "parameterType": "formBinaryData", "name": "iia_topical_requirement_files", "inputDataFieldName": "iia_topical_requirement_files_1" },
+            { "parameterType": "formBinaryData", "name": "iia_topical_requirement_files", "inputDataFieldName": "iia_topical_requirement_files_2" },
+            { "parameterType": "formBinaryData", "name": "iia_topical_requirement_files", "inputDataFieldName": "iia_topical_requirement_files_3" },
+            { "parameterType": "formBinaryData", "name": "iia_topical_requirement_files", "inputDataFieldName": "iia_topical_requirement_files_4" },
+            { "parameterType": "formBinaryData", "name": "iia_topical_requirement_files", "inputDataFieldName": "iia_topical_requirement_files_5" },
+            { "parameterType": "formBinaryData", "name": "iia_topical_requirement_files", "inputDataFieldName": "iia_topical_requirement_files_6" },
+            { "parameterType": "formBinaryData", "name": "iia_topical_requirement_files", "inputDataFieldName": "iia_topical_requirement_files_7" },
+            { "parameterType": "formBinaryData", "name": "iia_topical_requirement_files", "inputDataFieldName": "iia_topical_requirement_files_8" },
+            { "parameterType": "formBinaryData", "name": "procedure_process_document_files", "inputDataFieldName": "procedure_process_document_files" },
+            { "parameterType": "formBinaryData", "name": "kickoff_minutes_files", "inputDataFieldName": "kickoff_minutes_files" },
+            { "parameterType": "formBinaryData", "name": "previous_audit_rcm_files", "inputDataFieldName": "previous_audit_rcm_files" },
+            { "parameterType": "formBinaryData", "name": "final_audit_report_files", "inputDataFieldName": "final_audit_report_files" },
+            { "parameterType": "formBinaryData", "name": "policy_business_rule_files", "inputDataFieldName": "policy_business_rule_files" },
+            { "parameterType": "formBinaryData", "name": "trial_balance_data_files", "inputDataFieldName": "trial_balance_data_files_1" },
+            { "parameterType": "formBinaryData", "name": "trial_balance_data_files", "inputDataFieldName": "trial_balance_data_files_2" },
+            { "parameterType": "formBinaryData", "name": "gl_account_hierarchy_files", "inputDataFieldName": "gl_account_hierarchy_files_1" },
+            { "parameterType": "formBinaryData", "name": "dimension_hierarchy_files", "inputDataFieldName": "dimension_hierarchy_files_1" },
+            { "parameterType": "formBinaryData", "name": "dimension_hierarchy_files", "inputDataFieldName": "dimension_hierarchy_files_2" },
+            { "parameterType": "formBinaryData", "name": "dimension_hierarchy_files", "inputDataFieldName": "dimension_hierarchy_files_3" },
+            { "parameterType": "formBinaryData", "name": "dimension_hierarchy_files", "inputDataFieldName": "dimension_hierarchy_files_4" },
+            { "parameterType": "formBinaryData", "name": "impact_criteria_files", "inputDataFieldName": "impact_criteria_files" }
+          ]
+        },
+        "options": {
+          "response": { "response": { "fullResponse": true, "neverError": true } },
+          "timeout": 180000
+        }
+      },
+      "id": "b1d06c8d-1c0e-4c0c-aee3-abc5e6a22ee0",
+      "name": "Call RCM Builder API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [3072, 48],
+      "notes": "Returns 202 with a job_id — generation is async, so the workflow polls rather than holding the connection open."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 1 },
+          "conditions": [
+            { "leftValue": "={{ $json.statusCode }}", "operator": { "type": "number", "operation": "equals" }, "rightValue": 202 }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "14f9cbff-24a4-469a-b092-b5b86d3e732b",
+      "name": "Generation Succeeded?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [3520, 48]
+    },
+    {
+      "parameters": { "amount": 3, "unit": "minutes" },
+      "id": "28d0bd32-7324-405f-a801-49049f8868fd",
+      "name": "Wait Before Poll",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [3808, -368]
+    },
+    {
+      "parameters": {
+        "url": "={{ 'https://YOUR-RCM-SERVICE-HOST/rcm/status/' + $('Call RCM Builder API').item.json.body.job_id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "f8a26c3e-edc1-4684-8bb1-5a8dec3e497e",
+      "name": "Check Job Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [4176, -368]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 1 },
+                "conditions": [
+                  { "leftValue": "={{ $json.status }}", "operator": { "type": "string", "operation": "equals" }, "rightValue": "completed" }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "completed"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 1 },
+                "conditions": [
+                  { "leftValue": "={{ $json.status }}", "operator": { "type": "string", "operation": "equals" }, "rightValue": "failed" }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "failed"
+            }
+          ]
+        },
+        "options": { "fallbackOutput": "extra", "renameFallbackOutput": "still_running" }
+      },
+      "id": "a9a6eb34-996e-4955-85fb-46bb93120a76",
+      "name": "Job Poll Result?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [4576, -384],
+      "notes": "Three named outcomes. still_running loops back to Wait Before Poll; failed alerts the reviewer; completed fetches the workbook."
+    },
+    {
+      "parameters": {
+        "url": "={{ 'https://YOUR-RCM-SERVICE-HOST/rcm/result/' + $('Call RCM Builder API').item.json.body.job_id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": { "response": { "response": { "fullResponse": true } } }
+      },
+      "id": "3b47b0ac-f562-4c1e-8d4f-29b48aee7778",
+      "name": "Fetch Result",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [5424, -400]
+    },
+    {
+      "parameters": {
+        "dataTableId": { "__rl": true, "mode": "id", "value": "REPLACE_WITH_YOUR_DATA_TABLE_ID" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "entity": "={{ $('RCM Intake Form').item.json.entity }}",
+            "audit_name": "={{ $('RCM Intake Form').item.json.audit_name }}",
+            "process_type": "={{ $('RCM Intake Form').item.json.process_type }}",
+            "reviewer_email": "={{ $('RCM Intake Form').item.json.reviewer_email }}",
+            "run_timestamp": "={{ $now.toISO() }}",
+            "generated_filename": "={{ $json.headers[\"content-disposition\"] }}",
+            "approval_status": "Pending"
+          },
+          "schema": [
+            { "id": "entity", "displayName": "entity", "type": "string", "display": true, "canBeUsedToMatch": true },
+            { "id": "audit_name", "displayName": "audit_name", "type": "string", "display": true, "canBeUsedToMatch": true },
+            { "id": "process_type", "displayName": "process_type", "type": "string", "display": true, "canBeUsedToMatch": true },
+            { "id": "reviewer_email", "displayName": "reviewer_email", "type": "string", "display": true, "canBeUsedToMatch": true },
+            { "id": "run_timestamp", "displayName": "run_timestamp", "type": "string", "display": true, "canBeUsedToMatch": true },
+            { "id": "generated_filename", "displayName": "generated_filename", "type": "string", "display": true, "canBeUsedToMatch": true },
+            { "id": "approval_status", "displayName": "approval_status", "type": "string", "display": true, "canBeUsedToMatch": true }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fe782655-74ac-4ee7-9218-8a1b3e9d61ff",
+      "name": "Record Run",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [5840, -496]
+    },
+    {
+      "parameters": { "mode": "combine", "combineBy": "combineByPosition", "options": {} },
+      "id": "164b371e-f2a8-4321-9e47-7746e7a2b6d8",
+      "name": "Combine Run ID + Workbook",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [6544, -416],
+      "notes": "Record Run returns the row id but drops the binary; Fetch Result carries the binary but not the id. Both are needed downstream."
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('RCM Intake Form').item.json.reviewer_email }}",
+        "subject": "={{ $('RCM Intake Form').item.json.entity }} — {{ $('RCM Intake Form').item.json.audit_name }} — Draft RCM Generated",
+        "message": "=<p>A draft Risk &amp; Control Matrix has been generated for <b>{{ $('RCM Intake Form').item.json.entity }}</b> — {{ $('RCM Intake Form').item.json.audit_name }}.</p><p>The workbook is attached. A separate email will follow shortly asking you to review and record your approval decision.</p>",
+        "options": { "attachmentsUi": { "attachmentsBinary": [{}] } }
+      },
+      "id": "4b9ecad3-4887-44c8-b063-ed45a6ef4bb8",
+      "name": "Deliver Workbook",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [6928, -416]
+    },
+    {
+      "parameters": {
+        "operation": "sendAndWait",
+        "sendTo": "={{ $('RCM Intake Form').item.json.reviewer_email }}",
+        "subject": "=Approval needed — {{ $('RCM Intake Form').item.json.entity }} — {{ $('RCM Intake Form').item.json.audit_name }}",
+        "message": "=Please review the draft RCM sent in the previous email for {{ $('RCM Intake Form').item.json.entity }} — {{ $('RCM Intake Form').item.json.audit_name }} (needs-review rows and Gap Log included), then record your decision below.",
+        "responseType": "customForm",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Decision",
+              "fieldType": "dropdown",
+              "fieldOptions": { "values": [{ "option": "Approved" }, { "option": "Not Yet Approved" }] },
+              "requiredField": true
+            },
+            { "fieldLabel": "Notes (optional)", "fieldType": "textarea" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "630ec8ff-0441-4722-8bf7-a171b9ae6a6e",
+      "name": "Request Approval",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [7312, -416],
+      "notes": "Gmail send-and-wait: the execution pauses here until the reviewer submits the decision form."
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": { "__rl": true, "mode": "id", "value": "REPLACE_WITH_YOUR_DATA_TABLE_ID" },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [{ "keyValue": "={{ $('Record Run').item.json.id }}" }]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "approval_status": "={{ $json.data.Decision }}",
+            "approval_notes": "={{ $json.data['Notes (optional)'] }}",
+            "approval_timestamp": "={{ $now.toISO() }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            { "id": "entity", "displayName": "entity", "type": "string", "display": true, "required": false, "defaultMatch": false, "readOnly": false, "removed": false },
+            { "id": "audit_name", "displayName": "audit_name", "type": "string", "display": true, "required": false, "defaultMatch": false, "readOnly": false, "removed": false },
+            { "id": "process_type", "displayName": "process_type", "type": "string", "display": true, "required": false, "defaultMatch": false, "readOnly": false, "removed": false },
+            { "id": "reviewer_email", "displayName": "reviewer_email", "type": "string", "display": true, "required": false, "defaultMatch": false, "readOnly": false, "removed": false },
+            { "id": "run_timestamp", "displayName": "run_timestamp", "type": "dateTime", "display": true, "required": false, "defaultMatch": false, "readOnly": false, "removed": false },
+            { "id": "generated_filename", "displayName": "generated_filename", "type": "string", "display": true, "required": false, "defaultMatch": false, "readOnly": false, "removed": false },
+            { "id": "approval_status", "displayName": "approval_status", "type": "string", "display": true, "required": false, "defaultMatch": false, "readOnly": false, "removed": false },
+            { "id": "approval_notes", "displayName": "approval_notes", "type": "string", "display": true, "required": false, "defaultMatch": false, "readOnly": false, "removed": false },
+            { "id": "approval_timestamp", "displayName": "approval_timestamp", "type": "dateTime", "display": true, "required": false, "defaultMatch": false, "readOnly": false, "removed": false }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "3ac458c5-2855-4175-a4fc-1a39f8b17945",
+      "name": "Record Approval Decision",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [7616, -400]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('RCM Intake Form').item.json.reviewer_email }}",
+        "subject": "=RCM generation failed — {{ $('RCM Intake Form').item.json.entity }} — {{ $('RCM Intake Form').item.json.audit_name }}",
+        "message": "=<p>The RCM Builder pipeline could not complete this run.</p><p><b>Status:</b> {{ $json.statusCode }}<br/><b>Detail:</b> {{ $json.body.detail }}</p><p>Please check the submitted files and process type, then resubmit the form.</p>",
+        "options": {}
+      },
+      "id": "26f93de3-62dc-4342-b70f-5e35da279765",
+      "name": "Notify Submission Failed",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [4192, 64]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('RCM Intake Form').item.json.reviewer_email }}",
+        "subject": "=RCM generation failed — {{ $('RCM Intake Form').item.json.entity }} — {{ $('RCM Intake Form').item.json.audit_name }}",
+        "message": "=<p>The RCM Builder pipeline could not complete this run.</p><p><b>Detail:</b> {{ $json.detail }}</p><p>Please check the submitted files and process type, then resubmit the form.</p>",
+        "options": {}
+      },
+      "id": "5ff7b99a-13c5-4a40-bedb-d9ed6d6b4b26",
+      "name": "Notify Pipeline Failed",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [5072, -368]
+    }
+  ],
+  "connections": {
+    "RCM Intake Form": { "main": [[{ "node": "Download IA SOP", "type": "main", "index": 0 }]] },
+    "Download IA SOP": { "main": [[{ "node": "Download Delegation of Authority", "type": "main", "index": 0 }]] },
+    "Download Delegation of Authority": { "main": [[{ "node": "Download ERM Register", "type": "main", "index": 0 }]] },
+    "Download ERM Register": { "main": [[{ "node": "Download TR — Third Party", "type": "main", "index": 0 }]] },
+    "Download TR — Third Party": { "main": [[{ "node": "Download TR — Third Party User Guide", "type": "main", "index": 0 }]] },
+    "Download TR — Third Party User Guide": { "main": [[{ "node": "Download TR — Cybersecurity", "type": "main", "index": 0 }]] },
+    "Download TR — Cybersecurity": { "main": [[{ "node": "Download TR — Cybersecurity User Guide", "type": "main", "index": 0 }]] },
+    "Download TR — Cybersecurity User Guide": { "main": [[{ "node": "Download TR — Org Resilience", "type": "main", "index": 0 }]] },
+    "Download TR — Org Resilience": { "main": [[{ "node": "Download TR — Org Resilience User Guide", "type": "main", "index": 0 }]] },
+    "Download TR — Org Resilience User Guide": { "main": [[{ "node": "Download TR — Org Behavior", "type": "main", "index": 0 }]] },
+    "Download TR — Org Behavior": { "main": [[{ "node": "Download TR — Org Behavior User Guide", "type": "main", "index": 0 }]] },
+    "Download TR — Org Behavior User Guide": { "main": [[{ "node": "Download TB — Year 1", "type": "main", "index": 0 }]] },
+    "Download TB — Year 1": { "main": [[{ "node": "Download TB — Year 2", "type": "main", "index": 0 }]] },
+    "Download TB — Year 2": { "main": [[{ "node": "Download GL Account Hierarchy", "type": "main", "index": 0 }]] },
+    "Download GL Account Hierarchy": { "main": [[{ "node": "Download Dimension — Business", "type": "main", "index": 0 }]] },
+    "Download Dimension — Business": { "main": [[{ "node": "Download Dimension — Cost Center", "type": "main", "index": 0 }]] },
+    "Download Dimension — Cost Center": { "main": [[{ "node": "Download Dimension — Location", "type": "main", "index": 0 }]] },
+    "Download Dimension — Location": { "main": [[{ "node": "Download Dimension — Product", "type": "main", "index": 0 }]] },
+    "Download Dimension — Product": { "main": [[{ "node": "Download Impact Criteria", "type": "main", "index": 0 }]] },
+    "Download Impact Criteria": { "main": [[{ "node": "Fill Missing Optional Binaries", "type": "main", "index": 0 }]] },
+    "Fill Missing Optional Binaries": { "main": [[{ "node": "Call RCM Builder API", "type": "main", "index": 0 }]] },
+    "Call RCM Builder API": { "main": [[{ "node": "Generation Succeeded?", "type": "main", "index": 0 }]] },
+    "Generation Succeeded?": {
+      "main": [
+        [{ "node": "Wait Before Poll", "type": "main", "index": 0 }],
+        [{ "node": "Notify Submission Failed", "type": "main", "index": 0 }]
+      ]
+    },
+    "Wait Before Poll": { "main": [[{ "node": "Check Job Status", "type": "main", "index": 0 }]] },
+    "Check Job Status": { "main": [[{ "node": "Job Poll Result?", "type": "main", "index": 0 }]] },
+    "Job Poll Result?": {
+      "main": [
+        [{ "node": "Fetch Result", "type": "main", "index": 0 }],
+        [{ "node": "Notify Pipeline Failed", "type": "main", "index": 0 }],
+        [{ "node": "Wait Before Poll", "type": "main", "index": 0 }]
+      ]
+    },
+    "Fetch Result": {
+      "main": [
+        [
+          { "node": "Record Run", "type": "main", "index": 0 },
+          { "node": "Combine Run ID + Workbook", "type": "main", "index": 1 }
+        ]
+      ]
+    },
+    "Record Run": { "main": [[{ "node": "Combine Run ID + Workbook", "type": "main", "index": 0 }]] },
+    "Combine Run ID + Workbook": { "main": [[{ "node": "Deliver Workbook", "type": "main", "index": 0 }]] },
+    "Deliver Workbook": { "main": [[{ "node": "Request Approval", "type": "main", "index": 0 }]] },
+    "Request Approval": { "main": [[{ "node": "Record Approval Decision", "type": "main", "index": 0 }]] }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "description": "Audit engagement intake, standing-corpus assembly from Drive, async RCM generation via FastAPI with job polling, workbook delivery and a Gmail send-and-wait approval gate. Sanitised: credentials, webhook IDs, Drive file IDs, data table ID, service host and client entities removed."
+}

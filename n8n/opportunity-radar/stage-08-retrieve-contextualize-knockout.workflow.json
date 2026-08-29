@@ -1,0 +1,277 @@
+{
+  "name": "Opportunity Radar - Stage 8: Module B (Retrieve + Contextualize + Knockout)",
+  "nodes": [
+    {
+      "id": "c8209051-eaac-4879-a678-c34e313ea9e7",
+      "name": "Daily Schedule",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [-1600, 128],
+      "parameters": { "rule": { "interval": [{ "triggerAtHour": 7 }] } }
+    },
+    {
+      "id": "e4a22ed9-2541-437f-8b14-2f552fcc7c47",
+      "name": "Get Guiding Principles",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [-1264, 128],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT body FROM kb_docs WHERE type = 'guiding_principles' LIMIT 1;",
+        "options": {}
+      }
+    },
+    {
+      "id": "086ed865-840e-4e0f-9865-9b22137ebdda",
+      "name": "Get All Abstracted Ideas",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [-880, 128],
+      "parameters": {
+        "operation": "executeQuery",
+        "options": {},
+        "query": "SELECT id, abstraction_json FROM ideas WHERE status = 'abstracted' ORDER BY created_at ASC;"
+      }
+    },
+    {
+      "id": "b0f332c8-3cfa-42e8-8cc6-009371eaa8b8",
+      "name": "Loop Ideas",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [-368, 160],
+      "parameters": { "options": {} }
+    },
+    {
+      "id": "3b48f666-cda6-4e5c-9567-ab8c0566d806",
+      "name": "All Ideas Validated",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [720, -224],
+      "parameters": {}
+    },
+    {
+      "id": "f55d116f-33c0-449e-a21f-55cebf1b3b3e",
+      "name": "Build Query Text",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [320, 160],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const out = [];\nfor (const item of $input.all()) {\n  const row = item.json;\n  let abs = row.abstraction_json;\n  if (typeof abs === 'string') { try { abs = JSON.parse(abs); } catch (e) { abs = {}; } }\n  abs = abs || {};\n  const parts = [abs.pattern, abs.category, abs.transferable_thesis, abs.enabling_shift].filter(Boolean);\n  out.push({ json: { idea_id: row.id, abstraction_json: abs, query_text: parts.join('. ') } });\n}\nreturn out;"
+      }
+    },
+    {
+      "id": "79df3996-b42e-41aa-b3ce-7955bc242f8f",
+      "name": "Embed Query (OpenAI)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [672, 144],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/embeddings",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'text-embedding-3-small', input: $json.query_text, dimensions: 1536 }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "0fed0dc9-6e39-46e0-ad1f-7ce97411db1e",
+      "name": "Format Vector Literal",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [896, 208],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const out = [];\nconst items = $input.all();\nconst built = $('Build Query Text').all();\nfor (let i = 0; i < items.length; i++) {\n  const emb = items[i].json.data[0].embedding;\n  out.push({ json: {\n    idea_id: built[i].json.idea_id,\n    abstraction_json: built[i].json.abstraction_json,\n    query_text: built[i].json.query_text,\n    query_vector: '[' + emb.join(',') + ']'\n  } });\n}\nreturn out;"
+      }
+    },
+    {
+      "id": "1c91a3cc-7c10-4b26-a855-22d7d476d0e7",
+      "name": "Retrieve Top-K KB Chunks",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [1120, 208],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH ranked AS (\n  SELECT\n    metadata->>'doc_type'  AS doc_type,\n    metadata->>'doc_title' AS doc_title,\n    (metadata->>'chunk_index')::int AS chunk_index,\n    metadata->>'kb_snapshot_id' AS kb_snapshot_id,\n    chunk_text,\n    embedding <=> $1::vector AS distance,\n    ROW_NUMBER() OVER (\n      PARTITION BY metadata->>'doc_type'\n      ORDER BY embedding <=> $1::vector\n    ) AS rn\n  FROM kb_index\n  WHERE metadata->>'doc_type' <> 'guiding_principles'\n)\nSELECT doc_type, doc_title, chunk_index, kb_snapshot_id, chunk_text,\n       ROUND(distance::numeric, 4) AS distance\nFROM ranked\nWHERE rn <= 3\nORDER BY distance, doc_type;",
+        "options": { "queryReplacement": "={{ [$json.query_vector] }}" }
+      }
+    },
+    {
+      "id": "a3fe1df7-8b74-41f2-aa3f-4f2e71a4a4a2",
+      "name": "Assemble Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1344, 208],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "const items = $input.all();\nconst prior = $('Format Vector Literal').first().json;\nconst abs = prior.abstraction_json || {};\n\nconst evidenceRefs = [];\nlet evidenceBlock = '';\nlet snapshotId = null;\n\nconst titleCounts = {};\nitems.forEach((it) => {\n  const c = it.json;\n  if (!snapshotId && c.kb_snapshot_id) snapshotId = c.kb_snapshot_id;\n\n  const baseLabel = (c.doc_title && String(c.doc_title).trim()) ? String(c.doc_title).trim() : (c.doc_type || 'KB Source');\n  titleCounts[baseLabel] = (titleCounts[baseLabel] || 0) + 1;\n  const ref = titleCounts[baseLabel] > 1 ? (baseLabel + ' \\u00a7' + titleCounts[baseLabel]) : baseLabel;\n\n  evidenceRefs.push({ ref, doc_type: c.doc_type, doc_title: c.doc_title, chunk_index: c.chunk_index, distance: c.distance });\n  evidenceBlock += '[' + ref + ']\\n' + (c.chunk_text || '') + '\\n\\n';\n});\n\nconst systemPrompt = [\n  'You are a national policy analyst. You ground a startup idea against national-level evidence and decide whether it survives a knockout filter.',\n  'Base every factual claim ONLY on the provided KB evidence chunks below, each labelled with its source name in brackets. Do not invent national facts. If evidence is insufficient, say so explicitly.',\n  'Pay particular attention to any evidence chunk describing an EXISTING GOVERNMENT initiative, authority, or platform. If the idea substantially duplicates what such a chunk describes as already live, that is a distinct and important knockout condition from ordinary private-sector competition — see condition 4 below.',\n  'IMPORTANT — long-horizon frontier/deep-tech ideas (e.g. fusion or advanced nuclear energy, quantum computing hardware, advanced space propulsion, novel materials science, foundational biotech): these should NOT be evaluated as if they need a near-term paying commercial customer. A sovereign wealth fund, strategic-investment vehicle, or government body with a plausible mandate to fund long-horizon strategic technology counts as a valid anchor buyer for these categories — do not apply condition 3 to a frontier idea merely because no near-term commercial customer is named. Reserve this leniency for ideas whose core technology genuinely requires a multi-year, capital-intensive build; do not extend it to ordinary software or applied-technology ventures just because they are ambitious.',\n  '',\n  'Return ONLY a JSON object with EXACTLY this shape:',\n  '{',\n  '  \"national_context\": {',\n  '    \"fit_rationale\": string,',\n  '    \"anchor_buyer\": string,',\n  '    \"local_wedge\": string,',\n  '    \"existing_players\": [string],',\n  '    \"regulatory_notes\": string,',\n  '    \"alignment_refs\": [string]',\n  '  },',\n  '  \"knockout\": { \"passed\": boolean, \"reason\": string }',\n  '}',\n  '',\n  'alignment_refs must list the exact bracketed source labels (as shown in the evidence block) that support your national_context.',\n  'Knockout — set passed=false if ANY of these hold, and name which in reason:',\n  '1. Saturated at the national level (multiple established national PRIVATE-SECTOR players already own this space).',\n  '2. Regulatory no-go (a hard licensing/regulatory barrier makes it infeasible).',\n  '3. No plausible anchor buyer (no sovereign or enterprise entity would credibly buy or fund this — for frontier/deep-tech ideas, this means no sovereign or strategic-capital vehicle with a plausible mandate can be identified even in principle, NOT the absence of a near-term commercial customer).',\n  '4. Already implemented by the government (a named authority, council, or platform in the evidence already does substantially the same thing as this idea). Do NOT apply this reason merely because the idea touches a related domain — it must substantially duplicate the named platform\\'s core mechanism. An idea that builds a specific, narrow application ON TOP OF an existing platform (rather than replacing it) does not trigger this condition; note that distinction explicitly in fit_rationale instead.',\n  'If none hold, passed=true with a brief justification.'\n].join('\\n');\n\nconst userPrompt = [\n  'IDEA',\n  'Pattern: ' + (abs.pattern || ''),\n  'Category: ' + (abs.category || ''),\n  'Transferable thesis: ' + (abs.transferable_thesis || ''),\n  'Enabling shift: ' + (abs.enabling_shift || ''),\n  '',\n  'NATIONAL KB EVIDENCE',\n  evidenceBlock.trim()\n].join('\\n');\n\nreturn [{ json: {\n  idea_id: prior.idea_id,\n  kb_snapshot_id: snapshotId,\n  evidence_refs: evidenceRefs,\n  system_prompt: systemPrompt,\n  user_prompt: userPrompt\n} }];"
+      }
+    },
+    {
+      "id": "f80b4b60-93a7-4807-8a97-137d0f6e4558",
+      "name": "Contextualize + Knockout (GPT)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [1568, 208],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'gpt-5.5', response_format: { type: 'json_object' }, messages: [ { role: 'system', content: $json.system_prompt }, { role: 'user', content: $json.user_prompt } ] }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "6dcfb790-8423-4847-a044-45ceff4f7117",
+      "name": "Parse Contextualization",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1792, 208],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "const out = [];\nfor (const item of $input.all()) {\n  const resp = item.json;\n  let content = resp && resp.choices && resp.choices[0] && resp.choices[0].message ? resp.choices[0].message.content : null;\n  let parsed = {};\n  try { parsed = JSON.parse(content); } catch (e) { parsed = { _parse_error: true, _raw: content }; }\n  out.push({ json: {\n    idea_id: $('Assemble Context').first().json.idea_id,\n    kb_snapshot_id: $('Assemble Context').first().json.kb_snapshot_id,\n    evidence_refs: $('Assemble Context').first().json.evidence_refs,\n    national_context: parsed.national_context || null,\n    knockout: parsed.knockout || null,\n    parse_error: parsed._parse_error || false\n  } });\n}\nreturn out;"
+      }
+    },
+    {
+      "id": "24c1a1ea-ebb8-4cc3-8954-f326e1a101d8",
+      "name": "Knockout Passed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [2016, 208],
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.knockout.passed }}",
+              "operator": { "operation": "equals", "type": "boolean" },
+              "rightValue": true
+            }
+          ],
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 }
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "6bbbceb8-7dca-43a0-890e-cfcf31dcd3cb",
+      "name": "Assemble Scoring Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2240, 128],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "const merged = $input.first().json;\nconst gp = $('Get Guiding Principles').first().json.body;\nconst evidenceUserPrompt = $('Assemble Context').first().json.user_prompt;\n\nconst criteriaList = [\n  'Strategic alignment with national agenda',\n  'Economic impact (GDP / jobs / FDI)',\n  'Feasibility at national level (talent, capital, regulatory readiness)',\n  'Anchor-demand clarity',\n  'Differentiation vs. existing national players',\n  'Defensibility / moat',\n  'Time to first value',\n  'Capital efficiency'\n];\n\nconst systemPrompt = [\n  'You are scoring a startup idea against the Opportunity Radar rubric.',\n  'Score EXACTLY these 8 criteria, in this exact order, using the criterion names EXACTLY as given below (verbatim, do not rephrase or reorder):',\n  criteriaList.map((c, i) => (i + 1) + '. ' + c).join('\\n'),\n  '',\n  'For each criterion assign a score from 0 to 5 (0.5 increments allowed) following the \"what a 5 looks like\" / \"what a 1-2 looks like\" anchors in the rubric below.',\n  'For each criterion also give an evidence_ref: the exact bracketed source label shown in the evidence block if a specific evidence chunk supports the score, \"national_context\" if the national_context synthesis (not a specific chunk) supports it, or \"none\" if the score is an estimate not grounded in the provided material.',\n  'Do NOT compute a weighted total or overall score yourself — only the 8 per-criterion scores and evidence_ref.',\n  'Base scores only on the IDEA, NATIONAL CONTEXT, and EVIDENCE provided. Do not invent national facts not present in the evidence.',\n  '',\n  'FULL RUBRIC (guiding principles — use for calibration):',\n  gp,\n  '',\n  'Return ONLY a JSON object: { \"criteria\": [ { \"name\": string, \"score\": number, \"evidence_ref\": string }, ... exactly 8 items, in the order listed above ] }'\n].join('\\n');\n\nconst userPrompt = [\n  evidenceUserPrompt,\n  '',\n  'NATIONAL CONTEXT (from prior contextualization step)',\n  JSON.stringify(merged.national_context, null, 2)\n].join('\\n');\n\nreturn [{ json: {\n  idea_id: merged.idea_id,\n  kb_snapshot_id: merged.kb_snapshot_id,\n  national_context: merged.national_context,\n  knockout: merged.knockout,\n  system_prompt: systemPrompt,\n  user_prompt: userPrompt\n} }];"
+      }
+    },
+    {
+      "id": "8988665d-2953-4fc5-b474-ac5e3dee0283",
+      "name": "Score Criteria (GPT)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [2464, 128],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'gpt-5.5', response_format: { type: 'json_object' }, messages: [ { role: 'system', content: $json.system_prompt }, { role: 'user', content: $json.user_prompt } ] }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "c191a68f-803d-48ab-979c-1ba4faa519ef",
+      "name": "Compute Weighted Total",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2688, 128],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "const out = [];\nfor (const item of $input.all()) {\n  const resp = item.json;\n  const prior = $('Assemble Scoring Context').first().json;\n  let content = resp && resp.choices && resp.choices[0] && resp.choices[0].message ? resp.choices[0].message.content : null;\n  let parsed = {};\n  let parseError = false;\n  try { parsed = JSON.parse(content); } catch (e) { parsed = { criteria: [] }; parseError = true; }\n\n  const weightTable = {\n    'Strategic alignment with national agenda': 0.20,\n    'Economic impact (GDP / jobs / FDI)': 0.15,\n    'Feasibility at national level (talent, capital, regulatory readiness)': 0.15,\n    'Anchor-demand clarity': 0.15,\n    'Differentiation vs. existing national players': 0.10,\n    'Defensibility / moat': 0.10,\n    'Time to first value': 0.10,\n    'Capital efficiency': 0.05\n  };\n\n  const criteriaRaw = Array.isArray(parsed.criteria) ? parsed.criteria : [];\n  const criteria = [];\n  const unmatched = [];\n  let weightedScoreSum0to5 = 0;\n  let matchedWeightSum = 0;\n  let groundedCount = 0;\n\n  for (const c of criteriaRaw) {\n    const name = (c && c.name) ? String(c.name).trim() : '';\n    const weight = weightTable.hasOwnProperty(name) ? weightTable[name] : null;\n    const score = typeof c.score === 'number' ? c.score : parseFloat(c.score);\n    const evidenceRef = c.evidence_ref ? String(c.evidence_ref).trim() : 'none';\n    const grounded = evidenceRef.toLowerCase() !== 'none' && evidenceRef.trim() !== '';\n\n    if (weight === null) {\n      unmatched.push(name);\n    } else {\n      weightedScoreSum0to5 += (isNaN(score) ? 0 : score) * weight;\n      matchedWeightSum += weight;\n    }\n    if (grounded) groundedCount++;\n\n    criteria.push({ name, score: isNaN(score) ? null : score, weight, evidence_ref: evidenceRef });\n  }\n\n  const totalCriteria = criteria.length || 1;\n  const groundedShare = groundedCount / totalCriteria;\n  let confidenceBand = 'low';\n  if (groundedShare >= 0.6) confidenceBand = 'high';\n  else if (groundedShare >= 0.3) confidenceBand = 'medium';\n\n  const weightedTotal = Math.round(weightedScoreSum0to5 * 20 * 100) / 100;\n\n  out.push({ json: {\n    idea_id: prior.idea_id,\n    kb_snapshot_id: prior.kb_snapshot_id,\n    national_context: prior.national_context,\n    knockout: prior.knockout,\n    scoring: {\n      criteria,\n      weighted_total: weightedTotal,\n      confidence_band: confidenceBand,\n      grounded_share: Math.round(groundedShare * 1000) / 1000,\n      matched_weight_sum: Math.round(matchedWeightSum * 1000) / 1000\n    },\n    unmatched_criteria: unmatched,\n    parse_error: parseError,\n    shortlist_eligible: weightedTotal >= 60 && (confidenceBand === 'medium' || confidenceBand === 'high')\n  } });\n}\nreturn out;"
+      }
+    },
+    {
+      "id": "bd17efa3-73c5-4325-a34a-55fa37ec511f",
+      "name": "Write Validated Result",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [2912, 128],
+      "parameters": {
+        "operation": "executeQuery",
+        "options": { "queryReplacement": "={{ [$json.idea_id, JSON.stringify($json.national_context), JSON.stringify($json.scoring), $json.kb_snapshot_id] }}" },
+        "query": "UPDATE ideas SET national_context_json = $2::jsonb, scoring_json = $3::jsonb, status = 'validated', kb_snapshot_id = $4, updated_at = now() WHERE id = $1::uuid RETURNING id, status;"
+      }
+    },
+    {
+      "id": "85cf8dc6-f179-4c91-af2e-479a89fdafdd",
+      "name": "Assemble Knockout Write",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2320, 400],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "const out = [];\nfor (const item of $input.all()) {\n  const d = item.json;\n  out.push({ json: {\n    idea_id: d.idea_id,\n    kb_snapshot_id: d.kb_snapshot_id,\n    national_context: d.national_context,\n    scoring: { knockout: d.knockout, criteria: [], weighted_total: null, confidence_band: null }\n  } });\n}\nreturn out;"
+      }
+    },
+    {
+      "id": "2238940a-ea3d-4181-a2b6-69e120542a0f",
+      "name": "Write Knocked Out",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [2608, 400],
+      "parameters": {
+        "operation": "executeQuery",
+        "options": { "queryReplacement": "={{ [$json.idea_id, JSON.stringify($json.national_context), JSON.stringify($json.scoring), $json.kb_snapshot_id] }}" },
+        "query": "UPDATE ideas SET national_context_json = $2::jsonb, scoring_json = $3::jsonb, status = 'knocked_out', kb_snapshot_id = $4, updated_at = now() WHERE id = $1::uuid RETURNING id, status;"
+      }
+    }
+  ],
+  "connections": {
+    "Daily Schedule": { "main": [[{ "node": "Get Guiding Principles", "type": "main", "index": 0 }]] },
+    "Get Guiding Principles": { "main": [[{ "node": "Get All Abstracted Ideas", "type": "main", "index": 0 }]] },
+    "Get All Abstracted Ideas": { "main": [[{ "node": "Loop Ideas", "type": "main", "index": 0 }]] },
+    "Loop Ideas": {
+      "main": [
+        [{ "node": "All Ideas Validated", "type": "main", "index": 0 }],
+        [{ "node": "Build Query Text", "type": "main", "index": 0 }]
+      ]
+    },
+    "Build Query Text": { "main": [[{ "node": "Embed Query (OpenAI)", "type": "main", "index": 0 }]] },
+    "Embed Query (OpenAI)": { "main": [[{ "node": "Format Vector Literal", "type": "main", "index": 0 }]] },
+    "Format Vector Literal": { "main": [[{ "node": "Retrieve Top-K KB Chunks", "type": "main", "index": 0 }]] },
+    "Retrieve Top-K KB Chunks": { "main": [[{ "node": "Assemble Context", "type": "main", "index": 0 }]] },
+    "Assemble Context": { "main": [[{ "node": "Contextualize + Knockout (GPT)", "type": "main", "index": 0 }]] },
+    "Contextualize + Knockout (GPT)": { "main": [[{ "node": "Parse Contextualization", "type": "main", "index": 0 }]] },
+    "Parse Contextualization": { "main": [[{ "node": "Knockout Passed?", "type": "main", "index": 0 }]] },
+    "Knockout Passed?": {
+      "main": [
+        [{ "node": "Assemble Scoring Context", "type": "main", "index": 0 }],
+        [{ "node": "Assemble Knockout Write", "type": "main", "index": 0 }]
+      ]
+    },
+    "Assemble Scoring Context": { "main": [[{ "node": "Score Criteria (GPT)", "type": "main", "index": 0 }]] },
+    "Score Criteria (GPT)": { "main": [[{ "node": "Compute Weighted Total", "type": "main", "index": 0 }]] },
+    "Compute Weighted Total": { "main": [[{ "node": "Write Validated Result", "type": "main", "index": 0 }]] },
+    "Write Validated Result": { "main": [[{ "node": "Loop Ideas", "type": "main", "index": 0 }]] },
+    "Assemble Knockout Write": { "main": [[{ "node": "Write Knocked Out", "type": "main", "index": 0 }]] },
+    "Write Knocked Out": { "main": [[{ "node": "Loop Ideas", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "description": "Retrieval, contextualization, knockout filtering and weighted rubric scoring for each abstracted idea. Sanitised: credentials removed, geography and client identifiers anonymised."
+}

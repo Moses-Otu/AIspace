@@ -1,0 +1,220 @@
+{
+  "name": "IARD - 01 Orchestrator",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "REPLACE_WITH_YOUR_FORM_PATH",
+        "formTitle": "New Audit Engagement Intake",
+        "formDescription": "Start a new audit report draft. Working file, kick-off deck, and audit notification are mandatory; the rest are optional but should be attached if available.",
+        "formFields": {
+          "values": [
+            { "fieldLabel": "Audit Title", "requiredField": true },
+            { "fieldLabel": "Quarter", "requiredField": true },
+            { "fieldLabel": "Year", "requiredField": true },
+            {
+              "fieldLabel": "Entity",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  { "option": "Operating Company A" },
+                  { "option": "Operating Company B" },
+                  { "option": "Operating Company C" },
+                  { "option": "Group" }
+                ]
+              },
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Overall Opinion",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  { "option": "Satisfactory" },
+                  { "option": "Minor Improvement Required" },
+                  { "option": "Improvement Required" },
+                  { "option": "Inadequate / Unsatisfactory" },
+                  { "option": "Not Rated" }
+                ]
+              },
+              "requiredField": true
+            },
+            { "fieldLabel": "Completed Audit Working File", "fieldType": "file", "requiredField": true },
+            { "fieldLabel": "Kick-off Deck", "fieldType": "file", "requiredField": true },
+            { "fieldLabel": "Process Understanding (optional)", "fieldType": "file" },
+            { "fieldLabel": "Audit Notification", "fieldType": "file", "requiredField": true },
+            { "fieldLabel": "Analysis Sheet (optional)", "fieldType": "file" },
+            { "fieldLabel": "Supporting Evidence (optional, multiple)", "fieldType": "file" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "6c863936-3607-4e18-9f9b-26212b2fd891",
+      "name": "Form Trigger: New Engagement",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "tableId": "engagement",
+        "fieldsUi": {
+          "fieldValues": [
+            { "fieldId": "title", "fieldValue": "={{ $json['Audit Title'] }}" },
+            { "fieldId": "quarter", "fieldValue": "={{ $json['Quarter'] }}" },
+            { "fieldId": "year", "fieldValue": "={{ $json['Year'] }}" },
+            { "fieldId": "entity", "fieldValue": "={{ $json['Entity'] }}" },
+            { "fieldId": "overall_opinion_label", "fieldValue": "={{ $json['Overall Opinion'] }}" },
+            { "fieldId": "status", "fieldValue": "draft" },
+            { "fieldId": "chat_session_id", "fieldValue": "={{ $workflow.id }}-{{ $execution.id }}" }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [208, 0],
+      "id": "261312e8-c28a-4bce-8af8-98487a7c25ea",
+      "name": "Create Engagement Row",
+      "notes": "chat_session_id ties the later refinement chat back to this engagement."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Carries the original form's uploaded files forward into Intake & Parse,\n// one item per file actually attached, tagged with engagement_id + doc_type.\n// This closes the gap where only the new engagement row (no files) was being\n// passed through to the sub-workflow.\nconst formItem = $('Form Trigger: New Engagement').first();\nconst engagementId = $('Create Engagement Row').first().json.id;\n\n// FIX: n8n's binary-field-name sanitization is inconsistent about underscore count around\n// parenthesized text (e.g. \"Process Understanding (optional)\" -> \"Process_Understanding__optional_\"\n// with a DOUBLE underscore, not single as originally assumed) — found via a real form submission\n// that hit source_document's doc_type check constraint. Matching by prefix instead of exact string\n// so this isn't fragile to that kind of formatting quirk again.\nconst PREFIX_TO_DOC_TYPE = [\n  ['Completed_Audit_Working_File', 'completed_audit_working_file'],\n  ['Kick', 'kickoff_deck'],\n  ['Process_Understanding', 'process_understanding'],\n  ['Audit_Notification', 'audit_notification'],\n  ['Analysis_Sheet', 'analysis_sheet'],\n  ['Supporting_Evidence', 'supporting_evidence']\n];\nfunction classify(key) {\n  const hit = PREFIX_TO_DOC_TYPE.find(([prefix]) => key.startsWith(prefix));\n  return hit ? hit[1] : null;\n}\n\nconst binaryKeys = Object.keys(formItem.binary || {});\nif (binaryKeys.length === 0) {\n  // No files attached (e.g. a manual/API test run) — nothing to classify.\n  // Downstream 'Compute Input Gaps' will still correctly flag missing mandatory inputs.\n  return [{ json: { engagement_id: engagementId, doc_type: null, file_ref: null, no_files: true } }];\n}\n\nreturn binaryKeys\n  .map(key => {\n    const bin = formItem.binary[key];\n    const docType = classify(key);\n    if (!docType) {\n      // Don't silently write an invalid/unrecognised doc_type — surface it instead (FR-23 spirit).\n      throw new Error(`Could not classify uploaded field \"${key}\" (filename: ${bin.fileName || 'unknown'}) into a known input type.`);\n    }\n    return { json: { engagement_id: engagementId, doc_type: docType, file_ref: bin.fileName || key }, binary: { data: bin } };\n  });"
+      },
+      "id": "6f510902-b382-4493-8e23-cca7a2f05c32",
+      "name": "Build File Classification Items",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [400, 0]
+    },
+    {
+      "parameters": {
+        "workflowId": { "__rl": true, "mode": "id", "value": "REPLACE_WITH_INTAKE_AND_PARSE_ID" },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "id": "ea0c9496-12d8-411f-aeea-62b13be73db6",
+      "name": "Execute Sub-workflow: Intake & Parse",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [592, 0]
+    },
+    {
+      "parameters": {
+        "workflowId": { "__rl": true, "mode": "id", "value": "REPLACE_WITH_FRONT_MATTER_ASSEMBLY_ID" },
+        "options": {}
+      },
+      "id": "fb95449e-b5a5-44d4-808d-8c78fe024651",
+      "name": "Execute Sub-workflow: Front-Matter Assembly",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [800, 0]
+    },
+    {
+      "parameters": {
+        "workflowId": "observation-drafting",
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "id": "caa01aeb-b7b2-4106-99a9-92b430f7b42d",
+      "name": "Execute Sub-workflow: Observation Drafting",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [1056, 0],
+      "disabled": true,
+      "notes": "Not built yet — observations are currently seeded directly into the observation table."
+    },
+    {
+      "parameters": {
+        "workflowId": { "__rl": true, "mode": "id", "value": "REPLACE_WITH_DOCUMENT_ASSEMBLY_ID" },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "id": "08f3e67a-5ba8-45dc-af55-e00f5fab1c98",
+      "name": "Execute Sub-workflow: Document Assembly (first draft)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [1312, 0]
+    },
+    {
+      "parameters": { "options": {} },
+      "id": "e89b8cea-5e2d-4cd1-88f9-d92ca2f55ca3",
+      "name": "Chat Trigger: Refinement Message",
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.1,
+      "position": [0, 400]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "engagement",
+        "limit": 1,
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            { "keyName": "chat_session_id", "condition": "eq", "keyValue": "={{ $json.sessionId }}" }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [384, 400],
+      "id": "e3859816-9dc7-4ce7-80b1-9421b5f4c198",
+      "name": "Resolve Engagement from Chat Session"
+    },
+    {
+      "parameters": {
+        "workflowId": { "__rl": true, "mode": "id", "value": "REPLACE_WITH_REFINEMENT_ID" },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "id": "b94977cb-69c9-414f-8a52-79d646079db4",
+      "name": "Execute Sub-workflow: Refinement",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [784, 400]
+    }
+  ],
+  "connections": {
+    "Form Trigger: New Engagement": { "main": [[{ "node": "Create Engagement Row", "type": "main", "index": 0 }]] },
+    "Create Engagement Row": { "main": [[{ "node": "Build File Classification Items", "type": "main", "index": 0 }]] },
+    "Build File Classification Items": { "main": [[{ "node": "Execute Sub-workflow: Intake & Parse", "type": "main", "index": 0 }]] },
+    "Execute Sub-workflow: Intake & Parse": { "main": [[{ "node": "Execute Sub-workflow: Front-Matter Assembly", "type": "main", "index": 0 }]] },
+    "Execute Sub-workflow: Front-Matter Assembly": { "main": [[{ "node": "Execute Sub-workflow: Observation Drafting", "type": "main", "index": 0 }]] },
+    "Execute Sub-workflow: Observation Drafting": { "main": [[{ "node": "Execute Sub-workflow: Document Assembly (first draft)", "type": "main", "index": 0 }]] },
+    "Chat Trigger: Refinement Message": { "main": [[{ "node": "Resolve Engagement from Chat Session", "type": "main", "index": 0 }]] },
+    "Resolve Engagement from Chat Session": { "main": [[{ "node": "Execute Sub-workflow: Refinement", "type": "main", "index": 0 }]] }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "description": "Two entry points into one system: a form trigger for a new engagement and a chat trigger for refinement instructions on an existing report. Sanitised: credentials, webhook IDs and sub-workflow IDs removed, client entities anonymised."
+}

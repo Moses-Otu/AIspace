@@ -6,6 +6,10 @@ version 1 got wrong.
 
 ---
 
+**Sanitised export:** [`creatoros.workflow.json`](creatoros.workflow.json) — 26 nodes including
+the sticky-note documentation. Credentials and webhook IDs removed; Slack channel IDs and the
+Hashnode publication id remain as explicit placeholders.
+
 ## Chain
 
 ```

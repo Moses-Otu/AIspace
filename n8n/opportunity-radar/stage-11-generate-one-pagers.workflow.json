@@ -1,0 +1,125 @@
+{
+  "name": "Opportunity Radar - Stage 11: Module C Generate + Persist One-Pagers",
+  "nodes": [
+    {
+      "id": "fb105a71-c0da-4790-9fbe-52b750fad423",
+      "name": "Daily Schedule",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [0, 192],
+      "parameters": {
+        "rule": { "interval": [{ "field": "days", "daysInterval": 1, "triggerAtHour": 8, "triggerAtMinute": 0 }] }
+      }
+    },
+    {
+      "id": "01dd5e1c-820c-4d86-8b31-661de3c3f7af",
+      "name": "Get All Validated Ideas",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [224, 192],
+      "parameters": {
+        "operation": "executeQuery",
+        "options": {},
+        "query": "SELECT id, source_json, abstraction_json, national_context_json, scoring_json, kb_snapshot_id, (SELECT count(*) FROM ideas p WHERE p.status = 'published') + ROW_NUMBER() OVER (ORDER BY (scoring_json->>'weighted_total')::numeric DESC NULLS LAST) AS idea_number FROM ideas WHERE status = 'validated' ORDER BY (scoring_json->>'weighted_total')::numeric DESC NULLS LAST"
+      }
+    },
+    {
+      "id": "373c34ce-6eef-4923-9baa-3563b38f0ea3",
+      "name": "Loop Ideas",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [448, 192],
+      "parameters": { "batchSize": 1 }
+    },
+    {
+      "id": "2eaa1ef0-5415-4321-959f-02c0198e71c5",
+      "name": "All One-Pagers Published",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [672, 0],
+      "parameters": {}
+    },
+    {
+      "id": "2550e4b3-4b61-41ba-9c1c-272e7c2a92ac",
+      "name": "Build One-Pager Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [672, 192],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "const item = $input.first().json;\nconst a = item.abstraction_json || {};\nconst dc = item.national_context_json || {};\nconst sc = item.scoring_json || {};\n\nconst criteriaLines = (sc.criteria || [])\n  .map(c => `- ${c.name}: ${c.score}/5 (evidence: ${c.evidence_ref})`)\n  .join('\\n');\n\nconst systemPrompt = [\n  'You are drafting sections of an internal one-pager for a partner deciding whether to pursue a venture idea for the national government.',\n  'Given the abstracted pattern and national-level validation context below, write the requested fields.',\n  'Be concise, concrete, and honest — especially about the failure mode. Avoid marketing language, hype, and hedging.',\n  '',\n  'Return ONLY a JSON object with EXACTLY this shape:',\n  '{',\n  '  \"name\": string,',\n  '  \"one_liner\": string,',\n  '  \"what_it_is\": string,',\n  '  \"what_it_takes\": string,',\n  '  \"why_it_might_fail\": string,',\n  '  \"why_relevant\": string,',\n  '  \"firm_lens\": string,',\n  '  \"owning_entity\": string,',\n  '  \"execution_level\": string,',\n  '  \"act_watch_kill\": string,',\n  '  \"next_90_days\": string',\n  '}',\n  '',\n  'name: a short venture name summarizing the idea, MAXIMUM 4 words (3 preferred). No hype, no taglines, no punctuation flourishes — just a plain, concrete, descriptive name someone could refer to it by in conversation (e.g. \"Logistics Asset Visibility\", \"Live Commerce Layer\"). Do not use generic placeholders like \"Idea 1\".',\n  'one_liner: a single sentence describing the national venture, no hype.',\n  'what_it_is: three concise lines (as one string, newline-separated) describing the product/venture concretely.',\n  'what_it_takes: capital, talent, regulatory, and time-to-first-value requirements, grounded in the given regulatory notes.',\n  'why_it_might_fail: the single most honest, concrete failure mode for this venture specifically at the national level. No hedging.',\n  'why_relevant: 1-2 sentences of REAL REASONING (not a list) explaining why this specific idea is relevant and defensible at the national level given the existing players named in the NATIONAL CONTEXT below. Explain what would make the differentiation credible in practice — e.g. what gap the existing players leave open, or what capability this idea has that they do not — rather than just restating the existing-players list or the differentiation/defensibility scores as numbers. If the evidence for defensibility is weak, say so honestly instead of inventing a moat.',\n  'firm_lens: one to two sentences on whether/how the firm could build the agentic/AI layer for this venture (the BD hook). Internal use only, not shown in partner-facing output.',\n  'owning_entity: the single most plausible named entity, ministerial council, authority, or sovereign fund that would own/execute this venture, drawn from the existing players and national context provided below. Be specific and concrete — never a generic phrase like \"the government\" or \"relevant ministry\".',\n  'execution_level: exactly \"national\" if owning_entity is a true national body, or \"regional: <name>\" if the strongest fit is genuinely at a specific regional level. Be honest about this — do not default to \"national\" just because the pipeline is nationally scoped.',\n  'act_watch_kill: exactly one word: \"Act\", \"Watch\", or \"Kill\". Act = an entity should move now (clear anchor, credible near-term or funded-milestone path). Watch = promising but a specific named blocker or gap needs resolving first. Kill = despite clearing the shortlist score, you would NOT actually recommend this to a decision-maker.',\n  'next_90_days: one concrete, specific action an owner could take in the next 90 days (e.g. a named pilot, a named study, a named engagement) — not a vague platitude like \"conduct further research\". If act_watch_kill is \"Watch\", this should be the specific step to resolve the named blocker. If \"Kill\", this should be blank or explain there is no recommended next step.'\n].join('\\n');\n\nconst userPrompt = [\n  'IDEA',\n  `Pattern: ${a.pattern || ''}`,\n  `Category: ${a.category || ''}`,\n  `Enabling shift: ${a.enabling_shift || ''}`,\n  `Transferable thesis: ${a.transferable_thesis || ''}`,\n  '',\n  'NATIONAL CONTEXT',\n  `Fit rationale: ${dc.fit_rationale || ''}`,\n  `Anchor buyer: ${dc.anchor_buyer || ''}`,\n  `Local wedge: ${dc.local_wedge || ''}`,\n  `Existing players: ${(dc.existing_players || []).join('; ')}`,\n  `Regulatory notes: ${dc.regulatory_notes || ''}`,\n  '',\n  `Weighted total: ${sc.weighted_total}`,\n  `Confidence band: ${sc.confidence_band}`,\n  'Score breakdown:',\n  criteriaLines\n].join('\\n');\n\nreturn [{ json: {\n  idea_id: item.id,\n  idea_number: item.idea_number,\n  source_json: item.source_json,\n  abstraction_json: item.abstraction_json,\n  national_context_json: item.national_context_json,\n  scoring_json: item.scoring_json,\n  system_prompt: systemPrompt,\n  user_prompt: userPrompt\n} }];"
+      }
+    },
+    {
+      "id": "29b59cdf-1a23-4364-b5c6-d23949b05f69",
+      "name": "Generate One-Pager Fields (GPT)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [896, 192],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'gpt-5.5', response_format: { type: 'json_object' }, messages: [ { role: 'system', content: $json.system_prompt }, { role: 'user', content: $json.user_prompt } ] }) }}"
+      }
+    },
+    {
+      "id": "4621d271-d221-4635-9a08-8f64e4b4ebc2",
+      "name": "Parse Generated Fields",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 192],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "const resp = $input.first().json;\nconst prior = $('Build One-Pager Prompt').first().json;\nconst content = resp && resp.choices && resp.choices[0] && resp.choices[0].message ? resp.choices[0].message.content : null;\nlet raw = {};\nlet parseError = false;\ntry { raw = JSON.parse(content); } catch (e) { raw = {}; parseError = true; }\n\nconst KEY_ALIASES = {\n  name: ['name', 'venture_name', 'title', 'idea_name'],\n  one_liner: ['one_liner', 'oneliner', 'one_line', 'summary'],\n  what_it_is: ['what_it_is', 'what_is_it', 'whatitis', 'what_is'],\n  what_it_takes: ['what_it_takes', 'what_takes', 'whatittakes', 'what_it_take', 'requirements'],\n  why_it_might_fail: ['why_it_might_fail', 'why_might_it_fail', 'why_it_may_fail', 'failure_mode'],\n  why_relevant: ['why_relevant', 'whyrelevant', 'why_defensible', 'relevance'],\n  firm_lens: ['firm_lens', 'firmlens', 'firm_angle'],\n  owning_entity: ['owning_entity', 'owner', 'executing_entity', 'entity'],\n  execution_level: ['execution_level', 'level'],\n  act_watch_kill: ['act_watch_kill', 'recommendation', 'decision'],\n  next_90_days: ['next_90_days', 'ninety_day_step', 'next_steps', 'next_step']\n};\n\nfunction pickField(obj, aliases) {\n  for (const key of aliases) {\n    if (obj && typeof obj[key] === 'string' && obj[key].trim().length > 0) return obj[key];\n  }\n  return '';\n}\n\nconst parsed = {};\nconst missingFields = [];\nfor (const canonical of Object.keys(KEY_ALIASES)) {\n  const value = pickField(raw, KEY_ALIASES[canonical]);\n  parsed[canonical] = value;\n  if (!value && canonical !== 'next_90_days') missingFields.push(canonical);\n}\n\nreturn [{ json: {\n  idea_id: prior.idea_id,\n  idea_number: prior.idea_number,\n  source_json: prior.source_json,\n  abstraction_json: prior.abstraction_json,\n  national_context_json: prior.national_context_json,\n  scoring_json: prior.scoring_json,\n  generated_fields: parsed,\n  parse_error: parseError,\n  generation_missing_fields: missingFields\n} }];"
+      }
+    },
+    {
+      "id": "bc18f5c4-dbac-4a5d-9017-2945f0e33de2",
+      "name": "Assemble Full One-Pager",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1344, 192],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "const item = $input.first().json;\nconst a = item.abstraction_json || {};\nconst dc = item.national_context_json || {};\nconst sc = item.scoring_json || {};\nconst gf = item.generated_fields || {};\nconst missingFields = item.generation_missing_fields || [];\n\nconst theShift = `Enabling shift: ${a.enabling_shift || ''}`;\n\nconst nationalWedge = [dc.fit_rationale || '', dc.local_wedge ? ('Wedge: ' + dc.local_wedge) : ''].filter(Boolean).join(' ');\n\nconst existingPlayersStr = (dc.existing_players || []).join(', ') || 'None evidenced';\nconst criteria = sc.criteria || [];\nconst diffCriterion = criteria.find(c => c.name === 'Differentiation vs. existing national players');\nconst defCriterion = criteria.find(c => c.name === 'Defensibility / moat');\n\nconst generatedWhyRelevant = (gf.why_relevant || '').trim();\nconst whyRelevant = generatedWhyRelevant.length > 0\n  ? generatedWhyRelevant\n  : `Existing players: ${existingPlayersStr}. Differentiation score: ${diffCriterion ? diffCriterion.score + '/5' : 'n/a'}. Defensibility score: ${defCriterion ? defCriterion.score + '/5' : 'n/a'}.`;\n\nconst shortlistEligible = (typeof sc.weighted_total === 'number' && sc.weighted_total >= 60) && ['medium', 'high'].includes(sc.confidence_band);\n\nconst generatedName = (gf.name || '').trim();\nconst finalName = generatedName.length > 0 ? generatedName : ('Idea ' + item.idea_number);\n\n// Rule-based sovereign/long-horizon lever classification (reorders by actionability)\nconst SOVEREIGN_KEYWORDS = /\\b(fusion|quantum|advanced nuclear|nuclear energy|space propulsion|rocket|launch vehicle|satellite constellation|longevity|geroscience|gene therapy|biotech breakthrough|novel materials|materials science|semiconductor fab|advanced semiconductor|hard[- ]?tech|deep[- ]?tech|sovereign wealth|frontier research)\\b/i;\nconst classifyText = [a.category, a.pattern, a.transferable_thesis].filter(Boolean).join(' ');\nconst sovereignLever = SOVEREIGN_KEYWORDS.test(classifyText);\n\n// Normalize act_watch_kill to exactly one of the three values\nconst rawDecision = (gf.act_watch_kill || '').trim().toLowerCase();\nlet actWatchKill = 'Watch';\nif (rawDecision.startsWith('act')) actWatchKill = 'Act';\nelse if (rawDecision.startsWith('kill')) actWatchKill = 'Kill';\nelse if (rawDecision.startsWith('watch')) actWatchKill = 'Watch';\n\nconst owningEntity = (gf.owning_entity || '').trim() || (dc.anchor_buyer || '').trim() || 'Not specified';\nconst next90Days = (gf.next_90_days || '').trim();\nconst executionLevel = (gf.execution_level || '').trim() || 'national';\n\nconst fields = {\n  name: finalName,\n  one_liner: gf.one_liner || '',\n  the_shift: theShift,\n  national_wedge: nationalWedge,\n  what_it_is: gf.what_it_is || '',\n  who_pays: dc.anchor_buyer || '',\n  why_defensible: whyRelevant,\n  what_it_takes: gf.what_it_takes || '',\n  why_it_might_fail: gf.why_it_might_fail || '',\n  score_breakdown: {\n    criteria: criteria,\n    weighted_total: sc.weighted_total,\n    confidence_band: sc.confidence_band\n  },\n  firm_lens: gf.firm_lens || '',\n  shortlist_eligible: shortlistEligible,\n  owning_entity: owningEntity,\n  execution_level: executionLevel,\n  act_watch_kill: actWatchKill,\n  next_90_days: next90Days,\n  sovereign_lever: sovereignLever\n};\n\nconst criteriaMd = criteria.map(c => `- ${c.name}: ${c.score}/5 (${c.evidence_ref})`).join('\\n');\n\nconst renderedMarkdown = [\n  `# ${fields.name}`,\n  fields.one_liner,\n  '',\n  `**Recommendation: ${fields.act_watch_kill}** | Owning entity: ${fields.owning_entity} (${fields.execution_level}) | Sovereign lever: ${fields.sovereign_lever ? 'Yes' : 'No'}`,\n  fields.next_90_days ? `Next 90 days: ${fields.next_90_days}` : '',\n  '',\n  '## The Shift', fields.the_shift,\n  '', '## National Wedge', fields.national_wedge,\n  '', '## What It Is', fields.what_it_is,\n  '', '## Who Pays', fields.who_pays,\n  '', '## Why Relevant', fields.why_defensible,\n  '', '## What It Takes', fields.what_it_takes,\n  '', '## Why It Might Fail', fields.why_it_might_fail,\n  '', '## Score Breakdown',\n  `Weighted Total: ${fields.score_breakdown.weighted_total}/100 (Confidence: ${fields.score_breakdown.confidence_band})`,\n  criteriaMd,\n  '', '## Firm Lens', fields.firm_lens,\n  '', `Shortlist eligible: ${fields.shortlist_eligible ? 'Yes' : 'No'}`\n].join('\\n');\n\nreturn [{ json: {\n  idea_id: item.idea_id,\n  one_pager_json: {\n    fields: fields,\n    rendered_markdown: renderedMarkdown,\n    generated_at: new Date().toISOString(),\n    generation_missing_fields: missingFields\n  }\n} }];"
+      }
+    },
+    {
+      "id": "bb387476-af89-4e55-ab3e-fc6c2869c100",
+      "name": "Write Published Result",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [1568, 272],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE ideas SET one_pager_json = $2::jsonb, status = 'published', updated_at = now() WHERE id = $1::uuid RETURNING id, status;",
+        "options": { "queryReplacement": "={{ [$json.idea_id, JSON.stringify($json.one_pager_json)] }}" }
+      }
+    }
+  ],
+  "connections": {
+    "Daily Schedule": { "main": [[{ "node": "Get All Validated Ideas", "type": "main", "index": 0 }]] },
+    "Get All Validated Ideas": { "main": [[{ "node": "Loop Ideas", "type": "main", "index": 0 }]] },
+    "Loop Ideas": {
+      "main": [
+        [{ "node": "All One-Pagers Published", "type": "main", "index": 0 }],
+        [{ "node": "Build One-Pager Prompt", "type": "main", "index": 0 }]
+      ]
+    },
+    "Build One-Pager Prompt": { "main": [[{ "node": "Generate One-Pager Fields (GPT)", "type": "main", "index": 0 }]] },
+    "Generate One-Pager Fields (GPT)": { "main": [[{ "node": "Parse Generated Fields", "type": "main", "index": 0 }]] },
+    "Parse Generated Fields": { "main": [[{ "node": "Assemble Full One-Pager", "type": "main", "index": 0 }]] },
+    "Assemble Full One-Pager": { "main": [[{ "node": "Write Published Result", "type": "main", "index": 0 }]] },
+    "Write Published Result": { "main": [[{ "node": "Loop Ideas", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "description": "Generates the one-pager fields per validated idea, assembles the full record with rendered markdown, and publishes. Sanitised: credentials removed, geography and client identifiers anonymised."
+}

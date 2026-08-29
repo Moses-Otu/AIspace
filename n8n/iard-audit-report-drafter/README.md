@@ -7,6 +7,17 @@ then lets the auditor refine it conversationally until they approve it.
 Built in n8n as five co-operating workflows over a Supabase schema, with a self-hosted
 FastAPI + `python-docx` service doing the actual document rendering.
 
+**Sanitised exports** — all five workflows, 65 nodes:
+[01 Orchestrator](01-orchestrator.workflow.json) ·
+[02 Intake & Parse](02-intake-and-parse.workflow.json) ·
+[03 Front-Matter Assembly](03-front-matter-assembly.workflow.json) ·
+[04 Document Assembly](04-document-assembly.workflow.json) ·
+[05 Refinement](05-refinement.workflow.json)
+
+Import 02–05 first, then set the `REPLACE_WITH_*_ID` placeholders in the orchestrator to the ids
+they get in your instance. Also set `RENDER_SERVICE_URL` as an n8n variable and reconnect Supabase
+and OpenAI credentials.
+
 > Client identifiers have been anonymised throughout. Entity names appear as
 > *Operating Company A/B/C*.
 

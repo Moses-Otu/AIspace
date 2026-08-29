@@ -1,0 +1,412 @@
+{
+  "name": "CreatorOS v2 — Multi-Agent Content Pipeline",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "fceae7c8-55fb-4a11-bf72-cbb33352e9bf",
+      "name": "Start (MVP - Manual)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [0, 432]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "title", "name": "title", "value": "<__PLACEHOLDER_VALUE__Post title, e.g. \"The Reverse Information Paradox\"__>", "type": "string" },
+            { "id": "topic", "name": "topic", "value": "<__PLACEHOLDER_VALUE__One-sentence topic description__>", "type": "string" },
+            { "id": "keyPoints", "name": "keyPoints", "value": "<__PLACEHOLDER_VALUE__Key points to cover, comma or newline separated__>", "type": "string" },
+            { "id": "audience", "name": "audience", "value": "Software engineers and technical founders interested in AI agents and automation", "type": "string" },
+            { "id": "writingStyle", "name": "writingStyle", "value": "Clear, direct, practical. Minimal fluff. Concrete examples over abstractions.", "type": "string" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c80217fa-7f21-46bf-b105-d278261b5309",
+      "name": "Content Brief",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [224, 432]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose", "version": 1 },
+          "conditions": [
+            { "leftValue": "={{ $json.title }}", "operator": { "type": "string", "operation": "notContains" }, "rightValue": "PLACEHOLDER_VALUE" },
+            { "leftValue": "={{ $json.topic }}", "operator": { "type": "string", "operation": "notContains" }, "rightValue": "PLACEHOLDER_VALUE" },
+            { "leftValue": "={{ $json.keyPoints }}", "operator": { "type": "string", "operation": "notContains" }, "rightValue": "PLACEHOLDER_VALUE" }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "e5910d27-5a4a-437c-b80e-80b21063e579",
+      "name": "Brief Filled In?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [448, 432]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Title: {{ $json.title }}\nTopic: {{ $json.topic }}\nKey points to cover: {{ $json.keyPoints }}",
+        "hasOutputParser": true,
+        "options": {}
+      },
+      "id": "d756326f-d301-4dba-a63e-cb8086ac7df1",
+      "name": "Research Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [672, 192]
+    },
+    {
+      "parameters": {
+        "model": { "__rl": true, "mode": "list", "value": "gpt-4.1" },
+        "builtInTools": {},
+        "options": {}
+      },
+      "id": "e2fb1a63-6500-4121-bbae-a45b71da23e1",
+      "name": "GPT Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [688, 416]
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{ \"summary\": \"\", \"citations\": [], \"counterarguments\": [] }"
+      },
+      "id": "ef0bca0a-2edd-45c5-97a5-43499e84c831",
+      "name": "Research Output Schema",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [816, 416]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose", "version": 1 },
+          "conditions": [
+            { "leftValue": "={{ $json.summary }}", "operator": { "type": "string", "operation": "notEmpty" } }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "efbb9bf0-aaff-4ef6-8282-e019d99c716f",
+      "name": "Research Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1024, 288]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Title: {{ $(\"Content Brief\").item.json.title }}\nTopic: {{ $(\"Content Brief\").item.json.topic }}\nKey points: {{ $(\"Content Brief\").item.json.keyPoints }}\nAudience: {{ $(\"Content Brief\").item.json.audience }}\nWriting style: {{ $(\"Content Brief\").item.json.writingStyle }}\n\nResearch summary: {{ $json.summary }}\nCitations: {{ $json.citations.join(\", \") }}\nCounterarguments to address: {{ $json.counterarguments.join(\", \") }}",
+        "options": {}
+      },
+      "id": "dcb45750-1e92-4edf-94b5-95674353e5ea",
+      "name": "Writer Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [1248, 192]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Article:\n{{ $json.output }}",
+        "options": {}
+      },
+      "id": "74964813-7251-4052-a897-9b93ba77d284",
+      "name": "Editor Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [1600, 192]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Article:\n{{ $json.output }}",
+        "hasOutputParser": true,
+        "options": {}
+      },
+      "id": "5572f559-257b-4ead-ada5-52cc891bf899",
+      "name": "Fact Check Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [1952, 192]
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{ \"article\": \"\", \"flags\": [ { \"claim\": \"\", \"issue\": \"\" } ] }"
+      },
+      "id": "8d75566e-6e10-4bf0-9da8-df3c9f3b0902",
+      "name": "Fact Check Output Schema",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [2032, 416]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Fact-checked article: {{ $json.article }}\nExisting flags: {{ JSON.stringify($json.flags) }}",
+        "hasOutputParser": true,
+        "options": {}
+      },
+      "id": "23d6143d-1b85-4f92-b2bb-306779f438c2",
+      "name": "SEO Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [2304, 192]
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{ \"article\": \"\", \"seoTitle\": \"\", \"slug\": \"\", \"description\": \"\", \"keywords\": [], \"tags\": [], \"ogDescription\": \"\", \"flags\": [] }"
+      },
+      "id": "b6d94539-8e46-4cad-82a9-16e7df93157b",
+      "name": "SEO Output Schema",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [2384, 416]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 },
+          "conditions": [
+            { "leftValue": "={{ $json.seoTitle }}", "operator": { "type": "string", "operation": "notEmpty" }, "id": "eeac3063-de92-4fff-9125-a4528c31475f" },
+            { "leftValue": "={{ $json.slug }}", "operator": { "type": "string", "operation": "notEmpty" }, "id": "df231337-eb24-4b20-985d-14657d8bf2fc" },
+            { "leftValue": "={{ $json.article.length }}", "operator": { "type": "number", "operation": "gte" }, "rightValue": 300, "id": "54af9d4b-f208-4b1e-9e67-52d77d9abbcb" }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "31b051e0-522b-4ea1-9f18-a6558441e86c",
+      "name": "SEO Output Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [2656, 192]
+    },
+    {
+      "parameters": {
+        "operation": "sendAndWait",
+        "select": "channel",
+        "channelId": "<__PLACEHOLDER_VALUE__Slack channel ID, e.g. C0123456789__>",
+        "message": "=New draft ready for review: *{{ $json.seoTitle }}*\nSlug: {{ $json.slug }}\nDescription: {{ $json.description }}\nTags: {{ $json.tags.join(\", \") }}\nFact-check flags: {{ JSON.stringify($json.flags) }}",
+        "approvalOptions": { "values": { "approvalType": "double", "disapproveLabel": "Reject" } },
+        "options": {}
+      },
+      "id": "dc5c16e2-8274-462b-b33a-f03399438aad",
+      "name": "Send for Approval",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [2880, 96]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose", "version": 1 },
+          "conditions": [
+            { "leftValue": "={{ $json.approved }}", "operator": { "type": "boolean", "operation": "true" } }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b7ab28ef-4bd6-42e1-b575-8e5a9c0df4f7",
+      "name": "Approved?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [3104, 96]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://gql.hashnode.com",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  query: \"mutation CreateDraft($input: CreateDraftInput!) { createDraft(input: $input) { draft { id slug title } } }\",\n  variables: {\n    input: {\n      title: $(\"SEO Agent\").item.json.seoTitle,\n      contentMarkdown: $(\"SEO Agent\").item.json.article,\n      publicationId: \"REPLACE_WITH_PUBLICATION_ID\",\n      slug: $(\"SEO Agent\").item.json.slug,\n      metaTags: { description: $(\"SEO Agent\").item.json.description }\n    }\n  }\n}) }}",
+        "options": {}
+      },
+      "id": "bc741b09-a164-45ce-8dfa-e8d7f6002265",
+      "name": "Publish to Hashnode (Draft)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [3328, 0]
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": "<__PLACEHOLDER_VALUE__Slack channel ID, e.g. C0123456789__>",
+        "text": "=Hashnode draft created: *{{ $json.data.createDraft.draft.title }}* (id: {{ $json.data.createDraft.draft.id }}).",
+        "otherOptions": {}
+      },
+      "id": "fe46584d-310c-48d0-9267-e08061de5557",
+      "name": "Notify Published",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [3552, 0]
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": "<__PLACEHOLDER_VALUE__Slack channel ID, e.g. C0123456789__>",
+        "text": "=Draft \"{{ $(\"SEO Agent\").item.json.seoTitle }}\" was rejected. It was not published to Hashnode.",
+        "otherOptions": {}
+      },
+      "id": "282df70c-539b-4631-ade5-b6044462fe58",
+      "name": "Notify Rejected",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [3328, 192]
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": "<__PLACEHOLDER_VALUE__Slack channel ID, e.g. C0123456789__>",
+        "text": "SEO Agent output failed validation (missing title/slug, or article too short). Check the execution log and re-run.",
+        "otherOptions": {}
+      },
+      "id": "8884615e-ded8-4b00-a4ca-56302a4747a4",
+      "name": "Alert: SEO Output Invalid",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [2880, 288]
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": "<__PLACEHOLDER_VALUE__Slack channel ID, e.g. C0123456789__>",
+        "text": "Research Agent did not return a valid summary. Check the execution log and re-run.",
+        "otherOptions": {}
+      },
+      "id": "7c2c674b-ce74-4e06-8985-17f367085b09",
+      "name": "Alert: Research Failed",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [1312, 384]
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": "<__PLACEHOLDER_VALUE__Slack channel ID, e.g. C0123456789__>",
+        "text": "The \"Content Brief\" node still has unfilled placeholders (title/topic/keyPoints). Fill them in and re-run the workflow.",
+        "otherOptions": {}
+      },
+      "id": "e6b3c96a-bb05-4548-92c3-9a7431462cf1",
+      "name": "Alert: Missing Brief",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [736, 592]
+    },
+    {
+      "parameters": {
+        "content": "## Content Brief + Validation\nFill in title/topic/keyPoints here.\n\"Brief Filled In?\" stops the run with a Slack alert instead of letting placeholder text silently flow into the agents (this is what broke the previous version).",
+        "height": 200,
+        "width": 300,
+        "color": 4
+      },
+      "id": "b5a2bdfa-b232-4fac-a652-d1746c480101",
+      "name": "Sticky Note: Brief",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [96, 592]
+    },
+    {
+      "parameters": {
+        "content": "## Agent Chain\nResearch, Fact Check, and SEO agents use Structured Output Parsers - they return real parsed JSON fields, not free text that has to be JSON.parse()'d downstream (the old design silently produced nulls when that parse failed).\nWriter and Editor stay as free-text Markdown agents.\nA validation gate follows Research and SEO output to catch failures early instead of letting them cascade through the whole chain.",
+        "height": 200,
+        "width": 300,
+        "color": 5
+      },
+      "id": "d7dd54de-55db-4728-aad1-1abbe2cbf22d",
+      "name": "Sticky Note: Agent Chain",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [1600, 592]
+    },
+    {
+      "parameters": {
+        "content": "## Real Human-in-the-Loop Gate\n\"Send for Approval\" uses Slack Send-and-Wait: the workflow genuinely pauses here until a human clicks Approve/Reject in Slack. Nothing runs downstream until then - this replaces the old design where \"approval\" was just a notification with no actual gate.\nRequires: Interactivity enabled on your Slack app + Request URL set to your n8n instance (see n8n docs \"Approvals in Slack\"). Verify the exact output field name (this uses $json.approved) against a real test run in your instance, since it can vary by n8n version.",
+        "height": 200,
+        "width": 300,
+        "color": 3
+      },
+      "id": "b13cb021-1a76-4ef4-b41a-8d8b3fa1c0ac",
+      "name": "Sticky Note: HITL Gate",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [2880, 448]
+    },
+    {
+      "parameters": {
+        "content": "## Publish\nOnly reachable after explicit human approval.\nFill in: Slack channel ID (all Slack nodes), Hashnode \"Hashnode API Token\" credential (HTTP Header Auth, header \"Authorization\", value \"Bearer <PAT>\"), and publicationId in the request body.",
+        "height": 200,
+        "width": 300,
+        "color": 7
+      },
+      "id": "db4fb40c-66ef-4fdf-a297-f1d2bd982e1b",
+      "name": "Sticky Note: Publish",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [3424, 288]
+    }
+  ],
+  "connections": {
+    "Start (MVP - Manual)": { "main": [[{ "node": "Content Brief", "type": "main", "index": 0 }]] },
+    "Content Brief": { "main": [[{ "node": "Brief Filled In?", "type": "main", "index": 0 }]] },
+    "Brief Filled In?": {
+      "main": [
+        [{ "node": "Research Agent", "type": "main", "index": 0 }],
+        [{ "node": "Alert: Missing Brief", "type": "main", "index": 0 }]
+      ]
+    },
+    "Research Agent": { "main": [[{ "node": "Research Valid?", "type": "main", "index": 0 }]] },
+    "GPT Model": {
+      "ai_languageModel": [
+        [
+          { "node": "Research Agent", "type": "ai_languageModel", "index": 0 },
+          { "node": "Writer Agent", "type": "ai_languageModel", "index": 0 },
+          { "node": "Editor Agent", "type": "ai_languageModel", "index": 0 },
+          { "node": "Fact Check Agent", "type": "ai_languageModel", "index": 0 },
+          { "node": "SEO Agent", "type": "ai_languageModel", "index": 0 }
+        ]
+      ]
+    },
+    "Research Output Schema": { "ai_outputParser": [[{ "node": "Research Agent", "type": "ai_outputParser", "index": 0 }]] },
+    "Research Valid?": {
+      "main": [
+        [{ "node": "Writer Agent", "type": "main", "index": 0 }],
+        [{ "node": "Alert: Research Failed", "type": "main", "index": 0 }]
+      ]
+    },
+    "Writer Agent": { "main": [[{ "node": "Editor Agent", "type": "main", "index": 0 }]] },
+    "Editor Agent": { "main": [[{ "node": "Fact Check Agent", "type": "main", "index": 0 }]] },
+    "Fact Check Agent": { "main": [[{ "node": "SEO Agent", "type": "main", "index": 0 }]] },
+    "Fact Check Output Schema": { "ai_outputParser": [[{ "node": "Fact Check Agent", "type": "ai_outputParser", "index": 0 }]] },
+    "SEO Agent": { "main": [[{ "node": "SEO Output Valid?", "type": "main", "index": 0 }]] },
+    "SEO Output Schema": { "ai_outputParser": [[{ "node": "SEO Agent", "type": "ai_outputParser", "index": 0 }]] },
+    "SEO Output Valid?": {
+      "main": [
+        [{ "node": "Send for Approval", "type": "main", "index": 0 }],
+        [{ "node": "Alert: SEO Output Invalid", "type": "main", "index": 0 }]
+      ]
+    },
+    "Send for Approval": { "main": [[{ "node": "Approved?", "type": "main", "index": 0 }]] },
+    "Approved?": {
+      "main": [
+        [{ "node": "Publish to Hashnode (Draft)", "type": "main", "index": 0 }],
+        [{ "node": "Notify Rejected", "type": "main", "index": 0 }]
+      ]
+    },
+    "Publish to Hashnode (Draft)": { "main": [[{ "node": "Notify Published", "type": "main", "index": 0 }]] }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "description": "Five-agent content pipeline with structured-output contracts, validation gates that stop and alert, and a Slack send-and-wait approval that blocks publishing. Sanitised: credentials and webhook IDs removed."
+}

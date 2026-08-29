@@ -1,0 +1,160 @@
+{
+  "name": "IARD - 02 Sub-workflow: Intake & Parse",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "3fc1b392-8f6e-45b9-a7ac-904e739abc55",
+      "name": "When Executed by Orchestrator",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [-992, 144]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.doc_type }}",
+              "operator": {
+                "operation": "notEmpty",
+                "singleValue": true,
+                "type": "string"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "id": "ae6aae6f-abfb-45aa-9220-659510cbdb71",
+      "name": "Filter: Has Real File",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [-752, 144]
+    },
+    {
+      "parameters": {
+        "tableId": "source_document",
+        "fieldsUi": {
+          "fieldValues": [
+            { "fieldId": "engagement_id", "fieldValue": "={{ $json.engagement_id }}" },
+            { "fieldId": "doc_type", "fieldValue": "={{ $json.doc_type }}" },
+            { "fieldId": "file_ref", "fieldValue": "={{ $json.file_ref }}" },
+            { "fieldId": "parse_status", "fieldValue": "pending" }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [-480, 144],
+      "id": "03c9a9ff-87f6-4c26-9f9b-f028c87c8166",
+      "name": "Register Source Document"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Gap flagging (FR-23): record which optional inputs are missing so the report\n// can surface this explicitly rather than silently proceeding.\n// v0.2: audit_notification moved from optional to mandatory.\nconst required = ['completed_audit_working_file', 'kickoff_deck', 'audit_notification'];\nconst optional = ['process_understanding', 'analysis_sheet'];\nconst items = $input.all();\nconst engagementId = items[0]?.json.engagement_id;\nconst present = new Set(items.map(i => i.json.doc_type).filter(Boolean));\nconst missingRequired = required.filter(t => !present.has(t));\nif (missingRequired.length) {\n  throw new Error('Missing mandatory input(s): ' + missingRequired.join(', '));\n}\nconst gaps = optional.filter(t => !present.has(t));\nreturn [{ json: { engagement_id: engagementId, input_gaps: gaps } }];"
+      },
+      "id": "9fcfaa98-2620-4a92-8c1d-9aa01fdbfe3e",
+      "name": "Compute Input Gaps",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-240, 144]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "engagement",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            { "keyName": "id", "condition": "eq", "keyValue": "={{ $json.engagement_id }}" }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            { "fieldId": "input_gaps", "fieldValue": "={{ JSON.stringify($json.input_gaps) }}" }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [16, -16],
+      "id": "6fa7e2ac-0545-4966-9bd6-be76abc79901",
+      "name": "Write Input Gaps to Engagement"
+    },
+    {
+      "parameters": {
+        "workflowId": "parse-working-file",
+        "options": {}
+      },
+      "id": "54ba8f9c-1758-4a19-bae2-190370121292",
+      "name": "Execute: Parse Completed Audit Working File (xlsx)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [16, 144],
+      "disabled": true,
+      "notes": "Row-level extraction into working_file_row per the export schema (risk, control, test steps, work done, test status/result, residual risk level, evidence refs)."
+    },
+    {
+      "parameters": {
+        "workflowId": "parse-kickoff-deck",
+        "options": {}
+      },
+      "id": "f68568bd-bd37-4f68-adda-b338a599ec71",
+      "name": "Execute: Parse Kick-off Deck (pptx)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [16, 288],
+      "disabled": true,
+      "notes": "Extracts objectives, scope, review period, stakeholder/acknowledgment text, and the 3 audit-team name+title pairs (D-3 alignment)."
+    },
+    {
+      "parameters": {
+        "workflowId": "parse-optional-inputs",
+        "options": {}
+      },
+      "id": "948803f9-3682-4660-86d8-063fd4c0dfc6",
+      "name": "Execute: Parse Optional Inputs (notification / process understanding incl. legacy .ppt / analysis sheet)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [16, 448],
+      "disabled": true,
+      "notes": "Only runs for inputs actually present. Legacy .ppt must be handled (FR-05). Any embedded image content is NOT auto-placed in the pilot — flagged as a known limitation pending scope decision."
+    }
+  ],
+  "connections": {
+    "When Executed by Orchestrator": {
+      "main": [[{ "node": "Filter: Has Real File", "type": "main", "index": 0 }]]
+    },
+    "Filter: Has Real File": {
+      "main": [[{ "node": "Register Source Document", "type": "main", "index": 0 }]]
+    },
+    "Register Source Document": {
+      "main": [[{ "node": "Compute Input Gaps", "type": "main", "index": 0 }]]
+    },
+    "Compute Input Gaps": {
+      "main": [
+        [
+          { "node": "Execute: Parse Completed Audit Working File (xlsx)", "type": "main", "index": 0 },
+          { "node": "Execute: Parse Kick-off Deck (pptx)", "type": "main", "index": 0 },
+          { "node": "Execute: Parse Optional Inputs (notification / process understanding incl. legacy .ppt / analysis sheet)", "type": "main", "index": 0 },
+          { "node": "Write Input Gaps to Engagement", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "description": "Registers each uploaded engagement document, flags missing optional inputs, and fans out to the per-format parsers. Sanitised: credentials removed, client identifiers anonymised."
+}

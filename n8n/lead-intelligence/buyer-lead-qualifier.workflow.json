@@ -1,0 +1,180 @@
+{
+  "name": "AI Lead Machine — Buyer Lead Qualifier",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "buyer-lead",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "7f413b03-bd2d-4393-b4e2-792d7fd8520f",
+      "name": "Buyer Lead In",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [0, 112]
+    },
+    {
+      "parameters": {
+        "url": "https://api.hunter.io/v2/email-verifier",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [{ "name": "email", "value": "={{ $json.body.email }}" }]
+        },
+        "options": { "response": { "response": { "neverError": true } } }
+      },
+      "id": "apollo-enrich-001",
+      "name": "Hunter Verify",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [176, 112],
+      "notes": "neverError so an enrichment failure degrades the score rather than killing the lead."
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=BUYER FORM SUBMISSION:\n{{ JSON.stringify($('Buyer Lead In').item.json.body) }}\n\nHUNTER EMAIL VERIFICATION (may be partial):\n{{ JSON.stringify($json.data || $json) }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "You are a senior real estate sales qualifier. A potential property BUYER filled a landing-page form, and we ALSO verified their email via Hunter.io.\n\nHunter returns signals such as: status (valid / invalid / accept_all / webmail / disposable / unknown), a deliverability score 0-100, whether the address is webmail (gmail/yahoo = personal), disposable (throwaway), and sometimes a company/organisation tied to the domain.\n\nUse BOTH signals to qualify the lead:\n1. STATED INTENT (form): budget, location, property type, bedrooms, timeline, financing readiness, message.\n2. EMAIL EVIDENCE (Hunter): A VALID, deliverable email = a real, reachable lead (good). A DISPOSABLE or INVALID email = likely fake or low-intent (lower the score significantly). A COMPANY-DOMAIN email suggests a working professional (some ability-to-pay signal) versus generic free webmail (neutral, common, fine). A low deliverability score means you may never reach them, so lower the score.\n\nNormalise: budget_band, preferred_location, property_type, bedrooms, timeline, financing_ready. Capture from Hunter: email_status, email_deliverable (yes/no), email_type (corporate/webmail/disposable/unknown), company (from domain if present, else blank).\n\nScore 0-100 on readiness-to-transact, weighing intent (urgency, clear budget, financing, specific need) AND email evidence (real, deliverable, professional = higher; disposable/invalid = much lower). Label hot (80+) / warm (50-79) / cold (<50). Note missing info, recommend the single best next action, and draft a short, warm, personalised first follow-up message ready to send. Be realistic — clear intent + valid email = hot; vague intent + disposable email = cold. Do not inflate.",
+          "passthroughBinaryImages": true
+        }
+      },
+      "id": "98f1349d-fd84-4741-a9f5-900fd046babe",
+      "name": "AI Lead Qualifier",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [368, 112]
+    },
+    {
+      "parameters": {
+        "model": { "__rl": true, "value": "gpt-4.1", "mode": "list", "cachedResultName": "gpt-4.1" },
+        "builtInTools": {},
+        "options": {}
+      },
+      "id": "e94772c3-4042-4cc1-b7f3-50f746c3c14a",
+      "name": "GPT Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [240, 336]
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\"full_name\":\"Jane Doe\",\"email\":\"jane@example.com\",\"phone\":\"08000000000\",\"budget_band\":\"₦80M–₦120M\",\"preferred_location\":\"Lekki\",\"property_type\":\"house\",\"bedrooms\":\"3\",\"timeline\":\"within 30 days\",\"financing_ready\":\"yes\",\"email_status\":\"valid\",\"email_deliverable\":\"yes\",\"email_type\":\"webmail\",\"company\":\"\",\"score\":82,\"temperature\":\"hot\",\"intent_summary\":\"Financed buyer seeking a 3-bed in Lekki within a month; valid, reachable email.\",\"missing_info\":\"None - well qualified\",\"recommended_action\":\"Call within 1 hour and offer 2 matching Lekki listings\",\"suggested_followup\":\"Hi Jane, I have two Lekki 3-beds in your budget — free for a viewing this weekend?\"}"
+      },
+      "id": "a2ce84d1-93d5-4a7a-b27c-3264ef7ac335",
+      "name": "Buyer Lead Schema",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [368, 336]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "c1", "name": "captured_at", "type": "string", "value": "={{ $now.toISO() }}" },
+            { "id": "c2", "name": "full_name", "type": "string", "value": "={{ $json.output.full_name }}" },
+            { "id": "c3", "name": "email", "type": "string", "value": "={{ $json.output.email }}" },
+            { "id": "c4", "name": "phone", "type": "string", "value": "={{ $json.output.phone }}" },
+            { "id": "c5", "name": "budget_band", "type": "string", "value": "={{ $json.output.budget_band }}" },
+            { "id": "c6", "name": "preferred_location", "type": "string", "value": "={{ $json.output.preferred_location }}" },
+            { "id": "c7", "name": "property_type", "type": "string", "value": "={{ $json.output.property_type }}" },
+            { "id": "c8", "name": "bedrooms", "type": "string", "value": "={{ $json.output.bedrooms }}" },
+            { "id": "c9", "name": "timeline", "type": "string", "value": "={{ $json.output.timeline }}" },
+            { "id": "c10", "name": "financing_ready", "type": "string", "value": "={{ $json.output.financing_ready }}" },
+            { "id": "c11", "name": "email_status", "type": "string", "value": "={{ $json.output.email_status }}" },
+            { "id": "c12", "name": "email_deliverable", "type": "string", "value": "={{ $json.output.email_deliverable }}" },
+            { "id": "c13", "name": "email_type", "type": "string", "value": "={{ $json.output.email_type }}" },
+            { "id": "c14", "name": "company", "type": "string", "value": "={{ $json.output.company }}" },
+            { "id": "c15", "name": "score", "type": "number", "value": "={{ $json.output.score }}" },
+            { "id": "c16", "name": "temperature", "type": "string", "value": "={{ $json.output.temperature }}" },
+            { "id": "c17", "name": "intent_summary", "type": "string", "value": "={{ $json.output.intent_summary }}" },
+            { "id": "c18", "name": "missing_info", "type": "string", "value": "={{ $json.output.missing_info }}" },
+            { "id": "c19", "name": "recommended_action", "type": "string", "value": "={{ $json.output.recommended_action }}" },
+            { "id": "c20", "name": "suggested_followup", "type": "string", "value": "={{ $json.output.suggested_followup }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "dd8181c0-5a6e-43a6-9a5b-c5cc7680f408",
+      "name": "Flatten For Storage",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [656, 112]
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "REPLACE_WITH_YOUR_SPREADSHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": { "__rl": true, "value": "gid=0", "mode": "id" },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": ["full_name"],
+          "schema": [
+            { "id": "captured_at", "displayName": "captured_at", "type": "string", "canBeUsedToMatch": true, "display": true, "required": false, "defaultMatch": false },
+            { "id": "full_name", "displayName": "full_name", "type": "string", "canBeUsedToMatch": true, "display": true, "required": false, "defaultMatch": false },
+            { "id": "email", "displayName": "email", "type": "string", "canBeUsedToMatch": true, "display": true, "required": false, "defaultMatch": false },
+            { "id": "phone", "displayName": "phone", "type": "string", "canBeUsedToMatch": true, "display": true, "required": false, "defaultMatch": false },
+            { "id": "budget_band", "displayName": "budget_band", "type": "string", "canBeUsedToMatch": true, "display": true, "required": false, "defaultMatch": false },
+            { "id": "preferred_location", "displayName": "preferred_location", "type": "string", "canBeUsedToMatch": true, "display": true, "required": false, "defaultMatch": false },
+            { "id": "property_type", "displayName": "property_type", "type": "string", "canBeUsedToMatch": true, "display": true, "required": false, "defaultMatch": false },
+            { "id": "bedrooms", "displayName": "bedrooms", "type": "string", "canBeUsedToMatch": true, "display": true, "required": false, "defaultMatch": false },
+            { "id": "timeline", "displayName": "timeline", "type": "string", "canBeUsedToMatch": true, "display": true, "required": false, "defaultMatch": false },
+            { "id": "financing_ready", "displayName": "financing_ready", "type": "string", "canBeUsedToMatch": true, "display": true, "required": false, "defaultMatch": false },
+            { "id": "email_status", "displayName": "email_status", "type": "string", "canBeUsedToMatch": true, "display": true, "required": false, "defaultMatch": false },
+            { "id": "email_deliverable", "displayName": "email_deliverable", "type": "string", "canBeUsedToMatch": true, "display": true, "required": false, "defaultMatch": false },
+            { "id": "email_type", "displayName": "email_type", "type": "string", "canBeUsedToMatch": true, "display": true, "required": false, "defaultMatch": false },
+            { "id": "company", "displayName": "company", "type": "string", "canBeUsedToMatch": true, "display": true, "required": false, "defaultMatch": false },
+            { "id": "score", "displayName": "score", "type": "string", "canBeUsedToMatch": true, "display": true, "required": false, "defaultMatch": false },
+            { "id": "temperature", "displayName": "temperature", "type": "string", "canBeUsedToMatch": true, "display": true, "required": false, "defaultMatch": false },
+            { "id": "intent_summary", "displayName": "intent_summary", "type": "string", "canBeUsedToMatch": true, "display": true, "required": false, "defaultMatch": false },
+            { "id": "missing_info", "displayName": "missing_info", "type": "string", "canBeUsedToMatch": true, "display": true, "required": false, "defaultMatch": false },
+            { "id": "recommended_action", "displayName": "recommended_action", "type": "string", "canBeUsedToMatch": true, "display": true, "required": false, "defaultMatch": false },
+            { "id": "suggested_followup", "displayName": "suggested_followup", "type": "string", "canBeUsedToMatch": true, "display": true, "required": false, "defaultMatch": false }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "a4c1c245-0c5e-492a-b578-8eb948ef5756",
+      "name": "Log Buyer Lead",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [832, 112]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\"status\":\"received\",\"message\":\"Thanks! One of our agents will reach out shortly with matching properties.\"}",
+        "options": {}
+      },
+      "id": "5dc7a1b5-4f06-4505-920f-bfe88bdf307f",
+      "name": "Confirm to Buyer",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [1024, 112]
+    }
+  ],
+  "connections": {
+    "Buyer Lead In": { "main": [[{ "node": "Hunter Verify", "type": "main", "index": 0 }]] },
+    "Hunter Verify": { "main": [[{ "node": "AI Lead Qualifier", "type": "main", "index": 0 }]] },
+    "GPT Model": { "ai_languageModel": [[{ "node": "AI Lead Qualifier", "type": "ai_languageModel", "index": 0 }]] },
+    "Buyer Lead Schema": { "ai_outputParser": [[{ "node": "AI Lead Qualifier", "type": "ai_outputParser", "index": 0 }]] },
+    "AI Lead Qualifier": { "main": [[{ "node": "Flatten For Storage", "type": "main", "index": 0 }]] },
+    "Flatten For Storage": { "main": [[{ "node": "Log Buyer Lead", "type": "main", "index": 0 }]] },
+    "Log Buyer Lead": { "main": [[{ "node": "Confirm to Buyer", "type": "main", "index": 0 }]] }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "description": "Real-estate buyer lead pipeline: landing-page webhook, Hunter.io email verification, AI qualification scoring stated intent against email evidence, flattened to columns and upserted to Google Sheets. Sanitised: credentials, webhook ID and spreadsheet ID removed."
+}

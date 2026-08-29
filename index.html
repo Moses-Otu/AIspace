@@ -326,20 +326,20 @@
     </div>
 
     <div class="stats rv">
-      <div class="stat"><b class="count" data-to="7">0</b><span>production systems</span></div>
-      <div class="stat"><b class="count" data-to="337">0</b><span>n8n workflows built</span></div>
-      <div class="stat"><b class="count" data-to="28">0</b><span>public repositories</span></div>
+      <div class="stat"><b class="count" data-to="7">7</b><span>production systems</span></div>
+      <div class="stat"><b class="count" data-to="337">337</b><span>n8n workflows built</span></div>
+      <div class="stat"><b class="count" data-to="28">28</b><span>public repositories</span></div>
     </div>
   </header>
 
   <section id="work">
     <div class="sec-head rv">
       <h2><i class="mono">01</i> Agentic systems</h2>
-      <div class="sec-note">Production n8n · write-ups and sanitised exports in-repo</div>
+      <div class="sec-note">Production n8n · 11 sanitised workflow exports in-repo</div>
     </div>
 
     <a class="item rv" href="https://github.com/Moses-Otu/AIspace/tree/main/n8n/iard-audit-report-drafter">
-      <div class="item-top"><span class="num mono">01</span><span class="t">Internal Audit Report Drafter</span><span class="badge">5 workflows</span><span class="arrow">→</span></div>
+      <div class="item-top"><span class="num mono">01</span><span class="t">Internal Audit Report Drafter</span><span class="badge">5 workflows · full source</span><span class="arrow">→</span></div>
       <p class="d">Turns a completed audit working file, kick-off deck and notification into a formatted draft
       Word report. Every section is classified as verbatim, fill, or generated — the model only writes the one
       section it is allowed to, grounded strictly in supplied sources. Auditors then refine it by chat
@@ -348,7 +348,7 @@
     </a>
 
     <a class="item rv" href="https://github.com/Moses-Otu/AIspace/tree/main/n8n/opportunity-radar">
-      <div class="item-top"><span class="num mono">02</span><span class="t">Opportunity Radar</span><span class="badge">12-stage pipeline</span><span class="arrow">→</span></div>
+      <div class="item-top"><span class="num mono">02</span><span class="t">Opportunity Radar</span><span class="badge">12-stage pipeline</span><span class="badge">source</span><span class="arrow">→</span></div>
       <p class="d">Scans startup activity, abstracts each company into a transferable pattern, then grades it
       against a national policy corpus. pgvector retrieval pulls top-k evidence per document type, a knockout
       filter kills saturated or already-implemented ideas, and an eight-criterion weighted rubric scores what
@@ -357,7 +357,7 @@
     </a>
 
     <a class="item rv" href="https://github.com/Moses-Otu/AIspace/tree/main/n8n/engagement-pulse">
-      <div class="item-top"><span class="num mono">03</span><span class="t">Employee Engagement Pulse</span><span class="badge">full export</span><span class="arrow">→</span></div>
+      <div class="item-top"><span class="num mono">03</span><span class="t">Employee Engagement Pulse</span><span class="badge">full source</span><span class="arrow">→</span></div>
       <p class="d">A weekly wellbeing check-in that actually closes the loop: Friday dispatch, AI severity
       classification on each submission, routing to the right business partner, one-click “attended”
       confirmation, and a daily sweep that chases anything still open after two days.</p>
@@ -365,7 +365,7 @@
     </a>
 
     <a class="item rv" href="https://github.com/Moses-Otu/AIspace/tree/main/n8n/rcm-builder">
-      <div class="item-top"><span class="num mono">04</span><span class="t">Risk &amp; Control Matrix Builder</span><span class="arrow">→</span></div>
+      <div class="item-top"><span class="num mono">04</span><span class="t">Risk &amp; Control Matrix Builder</span><span class="badge">full source</span><span class="arrow">→</span></div>
       <p class="d">Intake form for a new audit engagement pulls standing-corpus documents from Drive, calls a
       FastAPI service to generate a draft risk-and-control matrix, emails the workbook to a reviewer, and
       captures the approve / not-yet decision back into the pipeline.</p>
@@ -373,7 +373,7 @@
     </a>
 
     <a class="item rv" href="https://github.com/Moses-Otu/AIspace/tree/main/n8n/creatoros-content-pipeline">
-      <div class="item-top"><span class="num mono">05</span><span class="t">CreatorOS</span><span class="badge">multi-agent</span><span class="arrow">→</span></div>
+      <div class="item-top"><span class="num mono">05</span><span class="t">CreatorOS</span><span class="badge">multi-agent</span><span class="badge">full source</span><span class="arrow">→</span></div>
       <p class="d">Research → write → edit → fact-check → SEO, as five agents with structured-output contracts
       instead of free text that has to be re-parsed downstream. Validation gates stop and alert on failure
       rather than cascading garbage, and publishing genuinely blocks on a Slack send-and-wait approval.</p>
@@ -389,7 +389,7 @@
     </a>
 
     <a class="item rv" href="https://github.com/Moses-Otu/AIspace/tree/main/n8n/lead-intelligence">
-      <div class="item-top"><span class="num mono">07</span><span class="t">Lead Intelligence</span><span class="arrow">→</span></div>
+      <div class="item-top"><span class="num mono">07</span><span class="t">Lead Intelligence</span><span class="badge">source</span><span class="arrow">→</span></div>
       <p class="d">Landing-page form to qualified pipeline: AI enrichment and hot/warm/cold scoring, flattened
       to columns and upserted on email, with a chat agent on top for company research, vendor intelligence
       and financial signals.</p>
@@ -530,10 +530,13 @@
   if (reduce) {
     revealAll();
   } else {
-    var queued = false;
+    var scheduled = false;
     var sweep = function () {
-      queued = false;
+      scheduled = false;
       if (!pending.length) return;
+      // A zero-height viewport (page rendered in a hidden or background tab) makes
+      // the fold line meaningless — reveal everything rather than hide the whole page.
+      if (!window.innerHeight) { revealAll(); return; }
       var fold = window.innerHeight * 0.94;
       var shown = 0;
       pending = pending.filter(function (el) {
@@ -543,16 +546,27 @@
         return false;
       });
     };
-    var onScroll = function () {
-      if (queued) return;
-      queued = true;
-      requestAnimationFrame(sweep);
+    // Throttle on setTimeout, not requestAnimationFrame. A page that is not being
+    // painted — occluded window, background tab, some embedded webviews — starves rAF
+    // while still reporting document.hidden === false and visibilityState "visible",
+    // so a latch cleared only inside an rAF callback stays stuck true and every later
+    // scroll returns early, leaving the rest of the page invisible for good.
+    // rAF is kept alongside purely to land the update on a paint when one is coming;
+    // whichever runs first clears the latch and the other becomes a no-op.
+    var requestSweep = function () {
+      if (scheduled) return;
+      scheduled = true;
+      setTimeout(sweep, 16);
+      if (typeof requestAnimationFrame === 'function') requestAnimationFrame(sweep);
     };
 
-    window.addEventListener('scroll', onScroll, { passive: true });
-    window.addEventListener('resize', onScroll, { passive: true });
-    window.addEventListener('hashchange', onScroll);
-    window.addEventListener('load', onScroll);
+    window.addEventListener('scroll', requestSweep, { passive: true });
+    window.addEventListener('resize', requestSweep, { passive: true });
+    window.addEventListener('orientationchange', requestSweep);
+    window.addEventListener('hashchange', requestSweep);
+    window.addEventListener('load', requestSweep);
+    window.addEventListener('pageshow', requestSweep);
+    document.addEventListener('visibilitychange', requestSweep);
     sweep();
   }
 
@@ -560,13 +574,19 @@
   var counters = document.querySelectorAll('.count');
   function run(el) {
     var to = parseInt(el.dataset.to, 10);
-    if (reduce) { el.textContent = to; return; }
-    var start = performance.now(), dur = 1100;
+    if (reduce || typeof requestAnimationFrame !== 'function') { el.textContent = to; return; }
+    el.textContent = '0';
+    var start = performance.now(), dur = 1100, done = false;
+    var finish = function () { if (!done) { done = true; el.textContent = to; } };
     (function step(now) {
+      if (done) return;
       var p = Math.min((now - start) / dur, 1);
       el.textContent = Math.round(to * (1 - Math.pow(1 - p, 3)));
-      if (p < 1) requestAnimationFrame(step);
+      if (p < 1) requestAnimationFrame(step); else done = true;
     })(start);
+    // Same rAF-starvation guard as the reveal sweep: if frames stop coming the count
+    // freezes on a wrong number and stays there, so snap to the real value regardless.
+    setTimeout(finish, dur + 400);
   }
   if (!('IntersectionObserver' in window)) {
     counters.forEach(run);
