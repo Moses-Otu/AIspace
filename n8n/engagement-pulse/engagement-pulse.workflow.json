@@ -1,0 +1,1584 @@
+{
+  "name": "Employee Engagement Pulse - Full Flow",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "triggerAtDay": [
+                5
+              ],
+              "triggerAtHour": 9
+            }
+          ]
+        }
+      },
+      "id": "e6aeeb64-6bb3-4ff1-9c30-7064d0700fb1",
+      "name": "Every Friday 09:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        240,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.email }}",
+        "subject": "Your weekly pulse check (30 seconds)",
+        "message": "=<div style=\"font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#1a1a1a;max-width:600px\"><p>Hi {{ $json.full_name.split(\" \")[0] }},</p><p>How has your week been? Two taps - it takes about 30 seconds.</p><p style=\"margin-top:24px\"><a href=\"https://vibe-coded-8s97.vercel.app/?employee_id={{ $json.employee_id }}&email={{ $json.email }}\" style=\"background:#1f4fd8;color:#ffffff;padding:12px 22px;border-radius:6px;text-decoration:none;display:inline-block\"><b>Take this week's pulse</b></a></p><p style=\"color:#666;font-size:12px\">Your response goes to your HR business partner so they can follow up where support is needed. It is not anonymous.</p></div>",
+        "options": {
+          "appendAttribution": false,
+          "senderName": "People Pulse"
+        }
+      },
+      "id": "99ff2fca-1c8c-460e-bd75-4a82a21a4be7",
+      "name": "Send Pulse Invite",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        720,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "case-id",
+              "name": "case_id",
+              "value": "=PC-{{ $now.toFormat(\"yyyyLLdd\") }}-{{ $execution.id }}",
+              "type": "string"
+            },
+            {
+              "id": "token",
+              "name": "token",
+              "value": "={{ $execution.id }}-{{ $now.toMillis() }}",
+              "type": "string"
+            },
+            {
+              "id": "employee-email",
+              "name": "employee_email",
+              "value": "={{ ($json.body?.work_email ?? $json.work_email ?? \"\").toString().toLowerCase().trim() }}",
+              "type": "string"
+            },
+            {
+              "id": "employee-id",
+              "name": "employee_id",
+              "value": "={{ $json.body?.employee_id ?? $json.employee_id ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "mood",
+              "name": "mood",
+              "value": "={{ $json.body?.mood ?? $json.mood ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "feeling",
+              "name": "feeling",
+              "value": "={{ $json.body?.mood_label ?? $json.mood_label ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "mood-score",
+              "name": "mood_score",
+              "value": "={{ Number($json.body?.mood_score ?? $json.mood_score ?? 0) }}",
+              "type": "number"
+            },
+            {
+              "id": "drivers",
+              "name": "drivers",
+              "value": "={{ ($json.body?.drivers ?? $json.drivers ?? []).join(\", \") }}",
+              "type": "string"
+            },
+            {
+              "id": "share-text",
+              "name": "share_text",
+              "value": "={{ $json.body?.details ?? $json.details ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "wants-outreach",
+              "name": "wants_outreach",
+              "value": "={{ ({ yes: \"Yes, please reach out\", maybe: \"Maybe, if you think it helps\", no: \"No, just sharing\" })[$json.body?.wants_outreach ?? $json.wants_outreach] ?? \"Not answered\" }}",
+              "type": "string"
+            },
+            {
+              "id": "submitted-at",
+              "name": "submitted_at",
+              "value": "={{ $json.body?.submittedAt ?? $now.toISO() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "6320daa2-cd59-45f9-8f25-07cc167fa628",
+      "name": "Normalize Submission",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        480,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.bp_email }}",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              },
+              "id": "45b1c9bb-1a33-4db2-b89c-9f2ef93b8354"
+            },
+            {
+              "leftValue": "={{ $json.is_active }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "id": "ac648268-c4fb-4f5c-810a-b91550d40848"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "51fe22d1-9c87-4bee-8bdf-d2aa223c0580",
+      "name": "Employee Record Found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        960,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "text": "=Mood chosen: {{ $(\"Normalize Submission\").item.json.feeling }} (score {{ $(\"Normalize Submission\").item.json.mood_score }} of 5)\nDrivers they tagged: {{ $(\"Normalize Submission\").item.json.drivers || \"none tagged\" }}\nWants HR outreach: {{ $(\"Normalize Submission\").item.json.wants_outreach }}\nComment: {{ $(\"Normalize Submission\").item.json.share_text || \"(nothing written)\" }}",
+        "attributes": {
+          "attributes": [
+            {
+              "name": "severity",
+              "description": "One of: critical, high, medium, low. critical = any sign of harm to self or others, harassment, discrimination, bullying, unsafe conditions, or a person in acute distress. high = burnout risk, sustained overload, conflict with a manager or colleague, intent to resign, or the employee explicitly asked for outreach. medium = a specific frustration or blocker that needs follow-up but is not urgent. low = neutral or positive check-in with nothing needing action.",
+              "required": true
+            },
+            {
+              "name": "reason",
+              "description": "One sentence, max 25 words, explaining the rating in neutral language. Do not diagnose or speculate about health.",
+              "required": true
+            },
+            {
+              "name": "theme",
+              "description": "The single dominant theme: workload, management, team, career, tools, recognition, wellbeing, none.",
+              "required": true
+            },
+            {
+              "name": "needs_response",
+              "type": "boolean",
+              "description": "True if a business partner should personally follow up with this employee.",
+              "required": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "93691a5f-5d09-4c0e-a7e1-5ac23d849377",
+      "name": "Classify Severity",
+      "type": "@n8n/n8n-nodes-langchain.informationExtractor",
+      "typeVersion": 1.2,
+      "position": [
+        1200,
+        448
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4",
+          "mode": "list",
+          "cachedResultName": "gpt-4"
+        },
+        "builtInTools": {},
+        "options": {
+          "temperature": 0
+        }
+      },
+      "id": "7a3abe29-415c-474a-b5ea-52f800877930",
+      "name": "Severity Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        1200,
+        672
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "case-id",
+              "name": "case_id",
+              "value": "={{ $(\"Normalize Submission\").item.json.case_id }}",
+              "type": "string"
+            },
+            {
+              "id": "token",
+              "name": "token",
+              "value": "={{ $(\"Normalize Submission\").item.json.token }}",
+              "type": "string"
+            },
+            {
+              "id": "employee-email",
+              "name": "employee_email",
+              "value": "={{ $(\"Look Up Employee Record\").item.json.email }}",
+              "type": "string"
+            },
+            {
+              "id": "employee-name",
+              "name": "employee_name",
+              "value": "={{ $(\"Look Up Employee Record\").item.json.full_name }}",
+              "type": "string"
+            },
+            {
+              "id": "unit",
+              "name": "unit",
+              "value": "={{ $(\"Look Up Employee Record\").item.json.unit }}",
+              "type": "string"
+            },
+            {
+              "id": "lm-email",
+              "name": "line_manager_email",
+              "value": "={{ $(\"Look Up Employee Record\").item.json.line_manager_email }}",
+              "type": "string"
+            },
+            {
+              "id": "bp-email",
+              "name": "bp_email",
+              "value": "={{ $(\"Look Up Employee Record\").item.json.bp_email }}",
+              "type": "string"
+            },
+            {
+              "id": "bp-name",
+              "name": "bp_name",
+              "value": "={{ $(\"Look Up Employee Record\").item.json.bp_name }}",
+              "type": "string"
+            },
+            {
+              "id": "feeling",
+              "name": "feeling",
+              "value": "={{ $(\"Normalize Submission\").item.json.feeling }}",
+              "type": "string"
+            },
+            {
+              "id": "drivers",
+              "name": "drivers",
+              "value": "={{ $(\"Normalize Submission\").item.json.drivers }}",
+              "type": "string"
+            },
+            {
+              "id": "share-text",
+              "name": "share_text",
+              "value": "={{ $(\"Normalize Submission\").item.json.share_text }}",
+              "type": "string"
+            },
+            {
+              "id": "wants-outreach",
+              "name": "wants_outreach",
+              "value": "={{ $(\"Normalize Submission\").item.json.wants_outreach }}",
+              "type": "string"
+            },
+            {
+              "id": "severity",
+              "name": "severity",
+              "value": "={{ $json.output.severity }}",
+              "type": "string"
+            },
+            {
+              "id": "severity-reason",
+              "name": "severity_reason",
+              "value": "={{ $json.output.reason }} (theme: {{ $json.output.theme }})",
+              "type": "string"
+            },
+            {
+              "id": "submitted-at",
+              "name": "submitted_at",
+              "value": "={{ $(\"Normalize Submission\").item.json.submitted_at }}",
+              "type": "string"
+            },
+            {
+              "id": "attended-url",
+              "name": "attended_url",
+              "value": "=https://YOUR-N8N-HOST/webhook/pulse-attended?case_id={{ $(\"Normalize Submission\").item.json.case_id }}&token={{ $(\"Normalize Submission\").item.json.token }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "15ca8fe3-b22c-4002-ae7d-83b0d7a4bf10",
+      "name": "Assemble Case",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1472,
+        448
+      ]
+    },
+    {
+      "parameters": {
+        "dataTableId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "lRal15PIXK4S4LbD",
+          "cachedResultName": "pulse_cases"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "case_id": "={{ $json.case_id }}",
+            "employee_email": "={{ $json.employee_email }}",
+            "employee_name": "={{ $json.employee_name }}",
+            "unit": "={{ $json.unit }}",
+            "line_manager_email": "={{ $json.line_manager_email }}",
+            "bp_email": "={{ $json.bp_email }}",
+            "bp_name": "={{ $json.bp_name }}",
+            "feeling": "={{ $json.feeling }}",
+            "share_text": "={{ $json.share_text }}",
+            "severity": "={{ $json.severity }}",
+            "severity_reason": "={{ $json.severity_reason }}",
+            "status": "pending",
+            "submitted_at": "={{ $json.submitted_at }}",
+            "reminder_sent": false,
+            "escalated": false,
+            "token": "={{ $json.token }}",
+            "drivers": "={{ $json.drivers }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "case_id",
+              "displayName": "case_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "employee_email",
+              "displayName": "employee_email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "employee_name",
+              "displayName": "employee_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "unit",
+              "displayName": "unit",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "line_manager_email",
+              "displayName": "line_manager_email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "bp_email",
+              "displayName": "bp_email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "bp_name",
+              "displayName": "bp_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "feeling",
+              "displayName": "feeling",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "share_text",
+              "displayName": "share_text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "severity",
+              "displayName": "severity",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "severity_reason",
+              "displayName": "severity_reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "submitted_at",
+              "displayName": "submitted_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "attended_at",
+              "displayName": "attended_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "attended_note",
+              "displayName": "attended_note",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "reminder_sent",
+              "displayName": "reminder_sent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "escalated",
+              "displayName": "escalated",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "token",
+              "displayName": "token",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "drivers",
+              "displayName": "drivers",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "8dafd50c-bf03-46d7-b700-2f81838ac38e",
+      "name": "Log Case",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1680,
+        448
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $(\"Assemble Case\").item.json.bp_email }}",
+        "subject": "={{ $(\"Assemble Case\").item.json.severity === \"critical\" || $(\"Assemble Case\").item.json.severity === \"high\" ? \"[Action needed] \" : \"\" }}Pulse check - {{ $(\"Assemble Case\").item.json.employee_name }} ({{ $(\"Assemble Case\").item.json.unit }})",
+        "message": "=<div style=\"font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#1a1a1a;max-width:600px\"><p>Hi {{ $(\"Assemble Case\").item.json.bp_name }},</p><p>A weekly pulse response came in from your unit.</p><table cellpadding=\"6\" style=\"border-collapse:collapse;width:100%\"><tr><td style=\"background:#f5f5f5\"><b>Employee</b></td><td>{{ $(\"Assemble Case\").item.json.employee_name }} ({{ $(\"Assemble Case\").item.json.employee_email }})</td></tr><tr><td style=\"background:#f5f5f5\"><b>Unit</b></td><td>{{ $(\"Assemble Case\").item.json.unit }}</td></tr><tr><td style=\"background:#f5f5f5\"><b>Mood</b></td><td>{{ $(\"Assemble Case\").item.json.feeling }}</td></tr><tr><td style=\"background:#f5f5f5\"><b>What is driving it</b></td><td>{{ $(\"Assemble Case\").item.json.drivers || \"(nothing tagged)\" }}</td></tr><tr><td style=\"background:#f5f5f5\"><b>Wants outreach</b></td><td>{{ $(\"Assemble Case\").item.json.wants_outreach }}</td></tr><tr><td style=\"background:#f5f5f5\"><b>Severity (AI)</b></td><td><b>{{ $(\"Assemble Case\").item.json.severity }}</b> - {{ $(\"Assemble Case\").item.json.severity_reason }}</td></tr><tr><td style=\"background:#f5f5f5\"><b>What they shared</b></td><td>{{ $(\"Assemble Case\").item.json.share_text || \"(nothing shared)\" }}</td></tr></table><p style=\"margin-top:24px\">Once you have followed up, click below so we can close the case:</p><p><a href=\"{{ $(\"Assemble Case\").item.json.attended_url }}\" style=\"background:#0b6b3a;color:#ffffff;padding:12px 22px;border-radius:6px;text-decoration:none;display:inline-block\"><b>Mark as attended</b></a></p><p style=\"color:#666;font-size:12px\">Case {{ $(\"Assemble Case\").item.json.case_id }}. If this is not marked attended within 2 days you will get a reminder.</p></div>",
+        "options": {
+          "appendAttribution": false,
+          "senderName": "People Pulse"
+        }
+      },
+      "id": "19f83a44-433c-4972-85dd-d8f5c0e374d4",
+      "name": "Email Business Partner",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1920,
+        448
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $(\"Assemble Case\").item.json.severity }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              },
+              "rightValue": "critical"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "05348300-f3a2-4fd2-904d-eab6bcbaf1a8",
+      "name": "Critical Severity?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2160,
+        448
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "people-ops@example.com",
+        "subject": "=[Critical pulse] {{ $(\"Assemble Case\").item.json.employee_name }} - {{ $(\"Assemble Case\").item.json.unit }}",
+        "message": "=<div style=\"font-family:Arial,Helvetica,sans-serif;font-size:14px\"><p>A pulse response was classified as <b>critical</b> and has been sent to {{ $(\"Assemble Case\").item.json.bp_name }} ({{ $(\"Assemble Case\").item.json.bp_email }}).</p><p><b>Employee:</b> {{ $(\"Assemble Case\").item.json.employee_name }} ({{ $(\"Assemble Case\").item.json.unit }})<br><b>Reason:</b> {{ $(\"Assemble Case\").item.json.severity_reason }}</p><p><b>What they shared:</b> {{ $(\"Assemble Case\").item.json.share_text }}</p><p style=\"color:#666;font-size:12px\">Case {{ $(\"Assemble Case\").item.json.case_id }}</p></div>",
+        "options": {
+          "appendAttribution": false,
+          "senderName": "People Pulse"
+        }
+      },
+      "id": "eedaba07-21e4-4b80-ae39-4a795d1d1b93",
+      "name": "Escalate to HR Lead",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        2400,
+        448
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "people-ops@example.com",
+        "subject": "Pulse check - submission could not be matched to an employee record",
+        "message": "=<div style=\"font-family:Arial,Helvetica,sans-serif;font-size:14px\"><p>A pulse response was submitted but no active employee record matched it.</p><p><b>Email given:</b> {{ $(\"Normalize Submission\").item.json.employee_email }}<br><b>Employee ID given:</b> {{ $(\"Normalize Submission\").item.json.employee_id || \"(none)\" }}<br><b>Feeling:</b> {{ $(\"Normalize Submission\").item.json.feeling }}</p><p><b>Shared:</b> {{ $(\"Normalize Submission\").item.json.share_text || \"(nothing shared)\" }}</p></div>",
+        "options": {
+          "appendAttribution": false,
+          "senderName": "People Pulse"
+        }
+      },
+      "id": "fb123c3a-06f1-44cc-a4f3-feef9d41ef60",
+      "name": "Alert Unmatched Submission",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1200,
+        864
+      ]
+    },
+    {
+      "parameters": {
+        "path": "pulse-attended",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "b24b5e5d-ef14-48f7-83da-d9e35faed225",
+      "name": "Attended Button Clicked",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        240,
+        1168
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "lRal15PIXK4S4LbD",
+          "cachedResultName": "pulse_cases"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "case_id",
+              "keyValue": "={{ $json.query.case_id }}"
+            },
+            {
+              "keyName": "token",
+              "keyValue": "={{ $json.query.token }}"
+            }
+          ]
+        },
+        "limit": 1
+      },
+      "id": "d5a5c29e-3906-43ee-8c19-e2daf81b4b48",
+      "name": "Find Case",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        480,
+        1168
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.case_id }}",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            },
+            {
+              "leftValue": "={{ $json.status }}",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              },
+              "rightValue": "attended"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "fde633a6-7944-4824-adf2-ef45e47339fd",
+      "name": "Open Case Found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        720,
+        1168
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "lRal15PIXK4S4LbD",
+          "cachedResultName": "pulse_cases"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "case_id",
+              "keyValue": "={{ $json.case_id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "attended",
+            "attended_at": "={{ $now.toISO() }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "case_id",
+              "displayName": "case_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "employee_email",
+              "displayName": "employee_email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "employee_name",
+              "displayName": "employee_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "unit",
+              "displayName": "unit",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "line_manager_email",
+              "displayName": "line_manager_email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "bp_email",
+              "displayName": "bp_email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "bp_name",
+              "displayName": "bp_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "feeling",
+              "displayName": "feeling",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "share_text",
+              "displayName": "share_text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "severity",
+              "displayName": "severity",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "severity_reason",
+              "displayName": "severity_reason",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "submitted_at",
+              "displayName": "submitted_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "attended_at",
+              "displayName": "attended_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "attended_note",
+              "displayName": "attended_note",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "reminder_sent",
+              "displayName": "reminder_sent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "escalated",
+              "displayName": "escalated",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "token",
+              "displayName": "token",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "drivers",
+              "displayName": "drivers",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "7257ae37-f759-4232-a241-998679017ff9",
+      "name": "Mark Case Attended",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        960,
+        1088
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "=<html><body style=\"font-family:Arial,Helvetica,sans-serif;text-align:center;padding:60px;color:#1a1a1a\"><h2 style=\"color:#0b6b3a\">Marked as attended</h2><p>Case {{ $(\"Attended Button Clicked\").item.json.query.case_id }} is now closed. Thank you for following up.</p></body></html>",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "text/html; charset=utf-8"
+              }
+            ]
+          }
+        }
+      },
+      "id": "3aaa7b2b-a225-4651-a99c-44c99a3251a7",
+      "name": "Show Confirmation",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1200,
+        1088
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "=<html><body style=\"font-family:Arial,Helvetica,sans-serif;text-align:center;padding:60px;color:#1a1a1a\"><h2>Nothing to do</h2><p>This case was either already marked as attended, or the link is not valid.</p></body></html>",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "text/html; charset=utf-8"
+              }
+            ]
+          }
+        }
+      },
+      "id": "44d0d460-7399-4c4c-aef8-effe6c7314ff",
+      "name": "Show Not Found or Already Attended",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        960,
+        1280
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 9
+            }
+          ]
+        }
+      },
+      "id": "29df2e3c-b8fa-4895-b518-9a593c637354",
+      "name": "Daily Sweep 09:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        240,
+        1632
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "lRal15PIXK4S4LbD",
+          "cachedResultName": "pulse_cases"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "status",
+              "keyValue": "pending"
+            },
+            {
+              "keyName": "reminder_sent",
+              "condition": "isFalse"
+            }
+          ]
+        },
+        "returnAll": true
+      },
+      "id": "b04adfcd-7693-47db-a2f6-663da4dc25ae",
+      "name": "Get Pending Cases",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        480,
+        1632
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.submitted_at }}",
+              "operator": {
+                "type": "dateTime",
+                "operation": "before"
+              },
+              "rightValue": "={{ $now.minus(2, \"days\") }}"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "823b73c1-9f37-4fcd-b07f-4ae0bafff5b2",
+      "name": "Pending Over 2 Days?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        720,
+        1632
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.bp_email }}",
+        "subject": "=Reminder - pulse case still open: {{ $json.employee_name }} ({{ $json.unit }})",
+        "message": "=<div style=\"font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#1a1a1a;max-width:600px\"><p>Hi {{ $json.bp_name }},</p><p>This pulse case has been open for more than 2 days and has not been marked as attended.</p><table cellpadding=\"6\" style=\"border-collapse:collapse;width:100%\"><tr><td style=\"background:#f5f5f5\"><b>Employee</b></td><td>{{ $json.employee_name }} ({{ $json.unit }})</td></tr><tr><td style=\"background:#f5f5f5\"><b>Submitted</b></td><td>{{ DateTime.fromISO($json.submitted_at).toFormat(\"dd LLL yyyy, HH:mm\") }}</td></tr><tr><td style=\"background:#f5f5f5\"><b>Severity (AI)</b></td><td><b>{{ $json.severity }}</b> - {{ $json.severity_reason }}</td></tr></table><p style=\"margin-top:24px\"><a href=\"https://YOUR-N8N-HOST/webhook/pulse-attended?case_id={{ $json.case_id }}&token={{ $json.token }}\" style=\"background:#0b6b3a;color:#ffffff;padding:12px 22px;border-radius:6px;text-decoration:none;display:inline-block\"><b>Mark as attended</b></a></p><p style=\"color:#666;font-size:12px\">Case {{ $json.case_id }}. This is the only automatic reminder for this case.</p></div>",
+        "options": {
+          "appendAttribution": false,
+          "senderName": "People Pulse"
+        }
+      },
+      "id": "99d8468e-1c66-43cc-9f2b-42178267df4c",
+      "name": "Send Reminder to Business Partner",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        960,
+        1632
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "lRal15PIXK4S4LbD",
+          "cachedResultName": "pulse_cases"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "case_id",
+              "keyValue": "={{ $(\"Pending Over 2 Days?\").item.json.case_id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "reminder_sent": true
+          },
+          "schema": [
+            {
+              "id": "reminder_sent",
+              "displayName": "reminder_sent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "13c675de-bc55-4817-bb54-39cf2e87e494",
+      "name": "Flag Reminder Sent",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1200,
+        1632
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 1. Friday dispatch\nEvery Friday 09:00, mails the pulse form link to every row in the employees data table where is_active and receives_pulse are both true.\n\nForm is published at https://vibe-coded-8s97.vercel.app/\n\nThe link carries employee_id AND email, so the form pre-fills and the submission matches even if someone types a different address.",
+        "height": 232,
+        "width": 620,
+        "color": 4
+      },
+      "id": "940f2a5a-ba52-46da-9308-e572a2927c58",
+      "name": "Sticky Note 58ba9e9c",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -480,
+        64
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 2. Submission handler\nIntake is the hosted two-page form (pulse-form.html), which POSTs JSON to the webhook below:\nhttps://YOUR-N8N-HOST/webhook/pulse-submit\n\nPayload: mood, mood_label, mood_score, drivers[], details, wants_outreach, work_email, employee_id.\n\nThen: look up the row in the employees data table by email OR employee_id -> AI severity rating -> log the case to pulse_cases -> email the business partner with the \"Mark as attended\" button.\n\nRouting is by bp_email on the employee row, not a hard-coded IF. The lookup is an OR match, so the is_active check lives in \"Employee Record Found?\". Critical severity also pings the HR lead. Unmatched or inactive submissions go to the alert mail instead of being lost.",
+        "height": 284,
+        "width": 604,
+        "color": 5
+      },
+      "id": "3f785b4a-2e5c-40d5-8d94-71927e5fe483",
+      "name": "Sticky Note 69d85d1e",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -480,
+        432
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 3. Attended callback\nThe button in the BP email hits this webhook with case_id + token. If the case exists and is still open it is marked attended and the BP sees a confirmation page. Already-closed or invalid links get a harmless \"nothing to do\" page. This section must be active for the button to work.",
+        "height": 240,
+        "width": 636,
+        "color": 3
+      },
+      "id": "9079c999-5c78-4927-bcf8-87e55dd5cec3",
+      "name": "Sticky Note a6559084",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -496,
+        1104
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 4. Reminder sweep\nEvery day at 09:00, any case still pending more than 2 days that has not already been reminded gets one nudge to the business partner, then reminder_sent is flagged so it never repeats. Change the 2 in \"Pending Over 2 Days?\" to retune the SLA.",
+        "height": 200,
+        "width": 636,
+        "color": 6
+      },
+      "id": "b428ef4b-bfcb-462f-ab2e-3a8b237da433",
+      "name": "Sticky Note 3608633a",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -480,
+        1552
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "Jv3R2IQzLyOcE5K8",
+          "cachedResultName": "employees"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "is_active",
+              "condition": "isTrue"
+            },
+            {
+              "keyName": "receives_pulse",
+              "condition": "isTrue"
+            }
+          ]
+        },
+        "returnAll": true,
+        "orderBy": true,
+        "orderByColumn": "unit",
+        "orderByDirection": "ASC"
+      },
+      "id": "1fb57653-e76b-4bb3-98d4-ab3a2a1c3f24",
+      "name": "Get Active Employees",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        480,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "Jv3R2IQzLyOcE5K8",
+          "cachedResultName": "employees"
+        },
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "email",
+              "keyValue": "={{ $json.employee_email }}"
+            },
+            {
+              "keyName": "employee_id",
+              "keyValue": "={{ $json.employee_id }}"
+            }
+          ]
+        },
+        "limit": 1
+      },
+      "id": "5a9c8f20-f7fe-4715-b9a0-4c4107b68f81",
+      "name": "Look Up Employee Record",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        720,
+        528
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "pulse-submit",
+        "options": {
+          "allowedOrigins": "*",
+          "ignoreBots": true,
+          "responseData": "{\"ok\":true}"
+        }
+      },
+      "id": "9fc632ac-d8ed-4279-9b9d-039a8d68cfdc",
+      "name": "Pulse Form Submitted",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        240,
+        528
+      ]
+    }
+  ],
+  "connections": {
+    "Employee Record Found?": {
+      "main": [
+        [
+          {
+            "node": "Classify Severity",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Alert Unmatched Submission",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify Severity": {
+      "main": [
+        [
+          {
+            "node": "Assemble Case",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Severity Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Classify Severity",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Assemble Case": {
+      "main": [
+        [
+          {
+            "node": "Log Case",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Case": {
+      "main": [
+        [
+          {
+            "node": "Email Business Partner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email Business Partner": {
+      "main": [
+        [
+          {
+            "node": "Critical Severity?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Critical Severity?": {
+      "main": [
+        [
+          {
+            "node": "Escalate to HR Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attended Button Clicked": {
+      "main": [
+        [
+          {
+            "node": "Find Case",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Case": {
+      "main": [
+        [
+          {
+            "node": "Open Case Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Open Case Found?": {
+      "main": [
+        [
+          {
+            "node": "Mark Case Attended",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Show Not Found or Already Attended",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Case Attended": {
+      "main": [
+        [
+          {
+            "node": "Show Confirmation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Daily Sweep 09:00": {
+      "main": [
+        [
+          {
+            "node": "Get Pending Cases",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Pending Cases": {
+      "main": [
+        [
+          {
+            "node": "Pending Over 2 Days?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pending Over 2 Days?": {
+      "main": [
+        [
+          {
+            "node": "Send Reminder to Business Partner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Reminder to Business Partner": {
+      "main": [
+        [
+          {
+            "node": "Flag Reminder Sent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every Friday 09:00": {
+      "main": [
+        [
+          {
+            "node": "Get Active Employees",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Active Employees": {
+      "main": [
+        [
+          {
+            "node": "Send Pulse Invite",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Submission": {
+      "main": [
+        [
+          {
+            "node": "Look Up Employee Record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Look Up Employee Record": {
+      "main": [
+        [
+          {
+            "node": "Employee Record Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pulse Form Submitted": {
+      "main": [
+        [
+          {
+            "node": "Normalize Submission",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true,
+    "binaryMode": "separate"
+  },
+  "description": "All four stages of the weekly pulse process in one workflow, separated by sticky notes: Friday dispatch, submission handler with AI severity, attended-button callback, and the 2-day reminder sweep."
+}

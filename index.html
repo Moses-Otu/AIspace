@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Moses Otu — AI &amp; Data Engineering</title>
+<meta name="description" content="Moses Otu builds agentic AI systems, retrieval pipelines and data infrastructure. Selected work, with source." />
+<meta property="og:title" content="Moses Otu — AI &amp; Data Engineering" />
+<meta property="og:description" content="Agentic AI systems, retrieval pipelines and data infrastructure. Selected work, with source." />
+<meta property="og:type" content="website" />
+<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+<style>
+  :root {
+    --bg: #fbfbfa;
+    --fg: #161614;
+    --muted: #6f6f68;
+    --faint: #a0a09a;
+    --rule: #e4e4df;
+    --tag-bg: #f0f0ec;
+    --max: 860px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0e0e0d;
+      --fg: #ececea;
+      --muted: #999992;
+      --faint: #6a6a64;
+      --rule: #242422;
+      --tag-bg: #1c1c1a;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font: 400 16px/1.6 ui-sans-serif, -apple-system, "Segoe UI", Inter, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: var(--max); margin: 0 auto; padding: 0 28px; }
+  a { color: inherit; }
+
+  header { padding: 96px 0 0; }
+  h1 { font-size: 22px; font-weight: 600; letter-spacing: -0.01em; margin: 0 0 14px; }
+  .lede { color: var(--muted); max-width: 60ch; margin: 0 0 26px; font-size: 17px; }
+  .lede strong { color: var(--fg); font-weight: 500; }
+  .links { display: flex; flex-wrap: wrap; gap: 20px; font-size: 14px; }
+  .links a {
+    color: var(--muted); text-decoration: none;
+    border-bottom: 1px solid var(--rule); padding-bottom: 2px;
+    transition: color .15s, border-color .15s;
+  }
+  .links a:hover { color: var(--fg); border-color: var(--fg); }
+
+  section { margin-top: 76px; }
+  .sec-head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--rule);
+  }
+  h2 { font-size: 13px; font-weight: 600; letter-spacing: .09em; text-transform: uppercase; margin: 0; }
+  .sec-note { font-size: 13px; color: var(--faint); text-align: right; }
+
+  .item {
+    display: block; text-decoration: none;
+    padding: 22px 0; border-bottom: 1px solid var(--rule);
+  }
+  .item:hover .t { border-color: var(--fg); }
+  .item-top { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .t {
+    font-weight: 500; font-size: 16.5px; letter-spacing: -0.005em;
+    border-bottom: 1px solid transparent; transition: border-color .15s;
+  }
+  .badge {
+    font-size: 11px; letter-spacing: .05em; text-transform: uppercase;
+    color: var(--faint); border: 1px solid var(--rule); border-radius: 3px;
+    padding: 1px 6px; white-space: nowrap;
+  }
+  .d { color: var(--muted); font-size: 14.5px; margin: 7px 0 10px; max-width: 68ch; }
+  .stack { display: flex; flex-wrap: wrap; gap: 6px; }
+  .stack span {
+    font-size: 11.5px; color: var(--muted); background: var(--tag-bg);
+    border-radius: 3px; padding: 2px 7px; white-space: nowrap;
+  }
+  .arrow { color: var(--faint); font-size: 13px; }
+  .item:hover .arrow { color: var(--fg); }
+
+  .compact { padding: 20px 0 4px; display: grid; gap: 11px; }
+  .compact a {
+    display: flex; gap: 12px; align-items: baseline;
+    text-decoration: none; font-size: 14.5px; flex-wrap: wrap;
+  }
+  .compact .n { color: var(--fg); border-bottom: 1px solid transparent; transition: border-color .15s; }
+  .compact a:hover .n { border-color: var(--fg); }
+  .compact .c { color: var(--muted); font-size: 13.5px; }
+
+  footer {
+    margin-top: 92px; padding: 26px 0 70px; border-top: 1px solid var(--rule);
+    color: var(--faint); font-size: 13px;
+    display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+  }
+  footer a { color: var(--muted); text-decoration: none; }
+  footer a:hover { color: var(--fg); }
+
+  @media (max-width: 620px) {
+    header { padding-top: 60px; }
+    section { margin-top: 56px; }
+    .sec-note { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>Moses Otu</h1>
+    <p class="lede">
+      I build <strong>agentic AI systems</strong> that do real work end to end — document generation
+      under strict grounding rules, retrieval pipelines over policy corpora, human-in-the-loop
+      approval gates — plus the <strong>data infrastructure</strong> underneath them.
+    </p>
+    <nav class="links">
+      <a href="https://github.com/Moses-Otu">GitHub</a>
+      <a href="https://github.com/Moses-Otu/AIspace">Source for this site</a>
+      <a href="mailto:otumosesjobs@gmail.com">Email</a>
+    </nav>
+  </header>
+
+  <section>
+    <div class="sec-head">
+      <h2>Agentic systems</h2>
+      <div class="sec-note">Production n8n · write-ups and sanitised exports in-repo</div>
+    </div>
+
+    <a class="item" href="https://github.com/Moses-Otu/AIspace/tree/main/n8n/iard-audit-report-drafter">
+      <div class="item-top"><span class="t">Internal Audit Report Drafter</span><span class="badge">5 workflows</span><span class="arrow">→</span></div>
+      <p class="d">Turns a completed audit working file, kick-off deck and notification into a formatted draft
+      Word report. Every section is classified as verbatim, fill, or generated — the model only writes the one
+      section it is allowed to, grounded strictly in supplied sources. Auditors then refine it by chat
+      (“merge issue 3 and 4”, “re-rate this high”), with a change log and an approval gate that freezes the report.</p>
+      <div class="stack"><span>n8n</span><span>GPT-4.1</span><span>Supabase</span><span>FastAPI</span><span>python-docx</span></div>
+    </a>
+
+    <a class="item" href="https://github.com/Moses-Otu/AIspace/tree/main/n8n/opportunity-radar">
+      <div class="item-top"><span class="t">Opportunity Radar</span><span class="badge">12-stage pipeline</span><span class="arrow">→</span></div>
+      <p class="d">Scans startup activity, abstracts each company into a transferable pattern, then grades it
+      against a national policy corpus. pgvector retrieval pulls top-k evidence per document type, a knockout
+      filter kills saturated or already-implemented ideas, and an eight-criterion weighted rubric scores what
+      survives — with a confidence band derived from how much of the score is actually evidence-backed.</p>
+      <div class="stack"><span>n8n</span><span>Postgres + pgvector</span><span>text-embedding-3-small</span><span>GPT-5.5</span><span>Perplexity</span><span>Exa</span></div>
+    </a>
+
+    <a class="item" href="https://github.com/Moses-Otu/AIspace/tree/main/n8n/engagement-pulse">
+      <div class="item-top"><span class="t">Employee Engagement Pulse</span><span class="badge">full export</span><span class="arrow">→</span></div>
+      <p class="d">A weekly wellbeing check-in that actually closes the loop: Friday dispatch, AI severity
+      classification on each submission, routing to the right business partner, one-click “attended”
+      confirmation, and a daily sweep that chases anything still open after two days.</p>
+      <div class="stack"><span>n8n</span><span>Information Extractor</span><span>Data tables</span><span>Gmail</span><span>Webhooks</span></div>
+    </a>
+
+    <a class="item" href="https://github.com/Moses-Otu/AIspace/tree/main/n8n/rcm-builder">
+      <div class="item-top"><span class="t">Risk &amp; Control Matrix Builder</span><span class="arrow">→</span></div>
+      <p class="d">Intake form for a new audit engagement pulls standing-corpus documents from Drive, calls a
+      FastAPI service to generate a draft risk-and-control matrix, emails the workbook to a reviewer, and
+      captures the approve / not-yet decision back into the pipeline.</p>
+      <div class="stack"><span>n8n</span><span>FastAPI</span><span>Google Drive</span><span>Gmail</span></div>
+    </a>
+
+    <a class="item" href="https://github.com/Moses-Otu/AIspace/tree/main/n8n/creatoros-content-pipeline">
+      <div class="item-top"><span class="t">CreatorOS</span><span class="badge">multi-agent</span><span class="arrow">→</span></div>
+      <p class="d">Research → write → edit → fact-check → SEO, as five agents with structured-output contracts
+      instead of free text that has to be re-parsed downstream. Validation gates stop and alert on failure
+      rather than cascading garbage, and publishing genuinely blocks on a Slack send-and-wait approval.</p>
+      <div class="stack"><span>n8n</span><span>LangChain agents</span><span>Structured output</span><span>Slack HITL</span><span>Hashnode GraphQL</span></div>
+    </a>
+
+    <a class="item" href="https://github.com/Moses-Otu/AIspace/tree/main/n8n/media-clippings">
+      <div class="item-top"><span class="t">Automated Media Clippings</span><span class="arrow">→</span></div>
+      <p class="d">Daily media monitoring: Brave search sweeps, an agent-driven selection sub-workflow that
+      picks what matters, response forms for human curation, and a dedicated error handler so a bad source
+      never silently drops a day of coverage.</p>
+      <div class="stack"><span>n8n</span><span>Brave Search</span><span>AI agents</span><span>Forms</span></div>
+    </a>
+
+    <a class="item" href="https://github.com/Moses-Otu/AIspace/tree/main/n8n/lead-intelligence">
+      <div class="item-top"><span class="t">Lead Intelligence</span><span class="arrow">→</span></div>
+      <p class="d">Landing-page form to qualified pipeline: AI enrichment and hot/warm/cold scoring, flattened
+      to columns and upserted on email, with a chat agent on top for company research, vendor intelligence
+      and financial signals.</p>
+      <div class="stack"><span>n8n</span><span>AI agents</span><span>Google Sheets</span><span>Enrichment APIs</span></div>
+    </a>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <h2>Applications &amp; ML</h2>
+      <div class="sec-note">Standalone repositories</div>
+    </div>
+
+    <a class="item" href="https://github.com/Moses-Otu/featurephone-ai">
+      <div class="item-top"><span class="t">FeaturePhone AI</span><span class="badge">live demo</span><span class="arrow">→</span></div>
+      <p class="d">An AI assistant that works over USSD, so it reaches any phone with no data connection.
+      A TypeScript simulator drives an n8n runtime where weather, currency, calculator and time are modular
+      tools the model chooses between, with session-keyed memory for multi-turn dialogue.</p>
+      <div class="stack"><span>TypeScript</span><span>n8n</span><span>USSD</span><span>Tool calling</span><span>Vercel</span></div>
+    </a>
+
+    <a class="item" href="https://github.com/Moses-Otu/Like-I-am-5">
+      <div class="item-top"><span class="t">Like I Am 5</span><span class="arrow">→</span></div>
+      <p class="d">A retrieval system that explains government public policy to residents in plain language —
+      grounded in the actual source documents, so the simplification never drifts into invention.</p>
+      <div class="stack"><span>Python</span><span>RAG</span><span>Vector search</span></div>
+    </a>
+
+    <a class="item" href="https://github.com/Moses-Otu/AIspace/tree/main/boneai-rag-app">
+      <div class="item-top"><span class="t">BoneAI</span><span class="arrow">→</span></div>
+      <p class="d">A domain-specific retrieval application built to keep answers anchored to retrieved
+      passages rather than model recall.</p>
+      <div class="stack"><span>Python</span><span>RAG</span><span>Embeddings</span></div>
+    </a>
+
+    <a class="item" href="https://github.com/Moses-Otu/AIspace/tree/main/Air-pollution-prediction-model">
+      <div class="item-top"><span class="t">Air Pollution Prediction</span><span class="arrow">→</span></div>
+      <p class="d">Regression models over environmental sensor data, packaged with a reproducible training
+      script, a prediction entry point and the thesis analysis behind the feature choices.</p>
+      <div class="stack"><span>Python</span><span>scikit-learn</span><span>Time series</span></div>
+    </a>
+
+    <a class="item" href="https://github.com/Moses-Otu/Recommender_system-Zenith-bank-Hackathon-">
+      <div class="item-top"><span class="t">Banking Recommender System</span><span class="badge">hackathon</span><span class="arrow">→</span></div>
+      <p class="d">A product recommender for retail banking customers, built under hackathon time constraints
+      against real transaction-shaped data.</p>
+      <div class="stack"><span>Python</span><span>Recommenders</span><span>Pandas</span></div>
+    </a>
+
+    <a class="item" href="https://github.com/Moses-Otu/Vibe_coded">
+      <div class="item-top"><span class="t">Vibe Coded</span><span class="badge">live demo</span><span class="arrow">→</span></div>
+      <p class="d">Front-ends built fast to put a real interface in front of a backend workflow — including
+      the pulse form that feeds the engagement pipeline above.</p>
+      <div class="stack"><span>HTML</span><span>Vercel</span></div>
+    </a>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <h2>Data engineering</h2>
+      <div class="sec-note">Warehousing, modelling, ETL</div>
+    </div>
+    <div class="compact">
+      <a href="https://github.com/Moses-Otu/Microsoft-Fabric-projects"><span class="n">Microsoft Fabric ETL</span><span class="c">Lakehouse ingestion and transformation in Fabric</span></a>
+      <a href="https://github.com/Moses-Otu/my-dbt-project"><span class="n">dbt Project</span><span class="c">Modular SQL transformations, tests and docs</span></a>
+      <a href="https://github.com/Moses-Otu/PyETL-ModernDataStack"><span class="n">PyETL — Modern Data Stack</span><span class="c">Python ETL across a modern warehouse stack</span></a>
+      <a href="https://github.com/Moses-Otu/tokyo-olympic-azure-data-engineering-project"><span class="n">Tokyo Olympics on Azure</span><span class="c">Data Factory to Data Lake to Synapse</span></a>
+      <a href="https://github.com/Moses-Otu/HR-Data-Modelling"><span class="n">HR Data Modelling</span><span class="c">Dimensional modelling for people analytics</span></a>
+      <a href="https://github.com/Moses-Otu/Olist-Ecommerce"><span class="n">Olist E-commerce</span><span class="c">End-to-end analysis of marketplace data</span></a>
+      <a href="https://github.com/Moses-Otu/Time-series-analysis"><span class="n">Time Series Analysis</span><span class="c">Forecasting methods and diagnostics</span></a>
+      <a href="https://github.com/Moses-Otu/EDA-with-python"><span class="n">EDA with Python</span><span class="c">Exploratory analysis patterns and notebooks</span></a>
+      <a href="https://github.com/Moses-Otu/SQL"><span class="n">SQL</span><span class="c">Query practice, window functions, optimisation</span></a>
+    </div>
+  </section>
+
+  <footer>
+    <span>Moses Otu</span>
+    <span><a href="https://github.com/Moses-Otu/AIspace">github.com/Moses-Otu/AIspace</a></span>
+  </footer>
+
+</div>
+</body>
+</html>
