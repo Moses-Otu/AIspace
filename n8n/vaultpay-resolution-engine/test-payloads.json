@@ -1,0 +1,186 @@
+{
+  "_notes": [
+    "POST each body to the workflow webhook: POST https://YOUR-N8N-HOST/webhook/vaultpay-ticket",
+    "Replace the email with a real customer from GET /customers on the bank API.",
+    "The expected values below assume a Gold-tier customer: 200 dollar conditional credit cap, 75 dollar refund cap, 25 dollar overdraft fee.",
+    "Run the clean lost-card case before the two fraud cases, since each blocks the same card at the API."
+  ],
+  "tests": [
+    {
+      "id": 1,
+      "route": "POLICY_QUESTION",
+      "proves": "PII sanitisation and tier-correct retrieval",
+      "body": {
+        "email": "someone@example.com",
+        "subject": "Overdraft fee question",
+        "message": "Why was I charged an overdraft fee? My card is 4111 1111 1111 1111 and the PIN is 4827."
+      },
+      "expect": {
+        "status": "RESOLVED_BY_AI",
+        "check": "Sanitize PII shows [PAN_REDACTED] and [PIN_REDACTED]; reply quotes the Gold fee of 25 dollars, max 2 per day"
+      }
+    },
+    {
+      "id": 2,
+      "route": "TRANSACTION_DISPUTE / within cap",
+      "proves": "tool calling against the bank API",
+      "body": {
+        "email": "someone@example.com",
+        "subject": "Charged twice",
+        "message": "I was charged twice for the same $89.99 order on Tuesday. Please sort out the duplicate."
+      },
+      "expect": {
+        "status": "RESOLVED_BY_AI",
+        "check": "Get Recent Transactions then Issue Conditional Credit both fire; reply calls the credit conditional and never guarantees the outcome"
+      }
+    },
+    {
+      "id": 3,
+      "route": "TRANSACTION_DISPUTE / over tier cap",
+      "proves": "deterministic cap enforcement before any agent runs",
+      "body": {
+        "email": "someone@example.com",
+        "subject": "Dispute a charge",
+        "message": "A furniture shop charged me $340 for a table that was never delivered. I want that disputed."
+      },
+      "expect": {
+        "status": "ESCALATED_TO_HUMAN",
+        "escalation_team": "Tier 2 Support",
+        "check": "over_tier_cap true; escalation reason names the 200 dollar Gold cap; qa_risk null because QA was never reached"
+      }
+    },
+    {
+      "id": 4,
+      "route": "TRANSACTION_DISPUTE / fraud",
+      "proves": "fraud routing with the card blocked first and no credit issued",
+      "body": {
+        "email": "someone@example.com",
+        "subject": "Unknown charges",
+        "message": "There are three transactions on my account that I do not recognise. I did not make them."
+      },
+      "expect": {
+        "status": "ESCALATED_TO_HUMAN",
+        "escalation_team": "Fraud Investigation",
+        "actions_taken": ["card_blocked"],
+        "check": "allowed_credit 0; reason cites VP-DISP-004; no model involved in the decision"
+      }
+    },
+    {
+      "id": 5,
+      "route": "LOST_OR_STOLEN_CARD / clean",
+      "proves": "policy-ordered actions taken before the agent speaks",
+      "body": {
+        "email": "someone@example.com",
+        "subject": "Lost my card",
+        "message": "I left my wallet in a taxi last night and my VaultPay card was in it. Please block it and send a replacement."
+      },
+      "expect": {
+        "status": "RESOLVED_BY_AI",
+        "check": "Block Card then Order Replacement Card run before Lost Card Agent; reply gives the Gold SLA of 1-2 business days and the free virtual card"
+      }
+    },
+    {
+      "id": 6,
+      "route": "LOST_OR_STOLEN_CARD / suspicious activity",
+      "proves": "no automated Zero Liability decision",
+      "body": {
+        "email": "someone@example.com",
+        "subject": "Card stolen",
+        "message": "My card was stolen at the weekend and there are already suspicious charges I did not make on the account."
+      },
+      "expect": {
+        "status": "ESCALATED_TO_HUMAN",
+        "escalation_team": "Fraud Investigation",
+        "actions_taken": ["card_blocked", "replacement_card_ordered"],
+        "check": "card still blocked and replaced first, then escalated"
+      }
+    },
+    {
+      "id": 7,
+      "route": "REFUND_REQUEST / bank fee within cap",
+      "proves": "eligible fee refund with compliant wording",
+      "body": {
+        "email": "someone@example.com",
+        "subject": "Fee charged in error",
+        "message": "I was charged a $25 overdraft fee but my salary deposit was already in the queue that morning. Please look at it."
+      },
+      "expect": {
+        "status": "RESOLVED_BY_AI",
+        "check": "Issue Fee Refund fires; reply contains none of the forbidden phrases"
+      }
+    },
+    {
+      "id": 8,
+      "route": "REFUND_REQUEST / merchant charge",
+      "proves": "the failure that cost the fictional bank fifty thousand dollars",
+      "body": {
+        "email": "someone@example.com",
+        "subject": "Refund please",
+        "message": "Amazon charged me $60 for a blender that never turned up and they are ignoring me. Refund me the $60."
+      },
+      "expect": {
+        "status": "RESOLVED_BY_AI",
+        "check": "no tool call; reply directs the customer to the merchant first and then to a dispute, and never offers a VaultPay refund"
+      }
+    },
+    {
+      "id": 9,
+      "route": "REFUND_REQUEST / over cap",
+      "proves": "refund cap enforced in code",
+      "body": {
+        "email": "someone@example.com",
+        "subject": "Refund of fees",
+        "message": "You have charged me $180 in maintenance fees over the last year even though I meet the waiver criteria. Refund it."
+      },
+      "expect": {
+        "status": "ESCALATED_TO_HUMAN",
+        "escalation_team": "Tier 2 Support",
+        "check": "reason names the 75 dollar Gold cap and VP-REF-005; actions_taken empty"
+      }
+    },
+    {
+      "id": 10,
+      "route": "REFUND_REQUEST / negligence language",
+      "proves": "mandatory escalation trigger regardless of amount",
+      "body": {
+        "email": "someone@example.com",
+        "subject": "Complaint",
+        "message": "Your staff lied to me about this transfer fee and I am speaking to my lawyer about legal action unless you refund it."
+      },
+      "expect": {
+        "status": "ESCALATED_TO_HUMAN",
+        "escalation_team": "Tier 2 Support",
+        "check": "negligence_language true; escalates on the VP-REF-005 trigger, not on the amount"
+      }
+    },
+    {
+      "id": 11,
+      "route": "UNCLASSIFIED",
+      "proves": "the fallback branch escalates rather than guessing",
+      "body": {
+        "email": "someone@example.com",
+        "subject": "Just saying thanks",
+        "message": "Thanks for the help last week, the team was great. Nothing else needed."
+      },
+      "expect": {
+        "status": "ESCALATED_TO_HUMAN",
+        "escalation_team": "Tier 1 Support"
+      }
+    },
+    {
+      "id": 12,
+      "route": "UNKNOWN CUSTOMER",
+      "proves": "no account conversation without identity, and zero model calls",
+      "body": {
+        "email": "not.a.customer@example.com",
+        "subject": "Overdraft fee question",
+        "message": "Why was I charged an overdraft fee?"
+      },
+      "expect": {
+        "status": "ESCALATED_TO_HUMAN",
+        "escalation_team": "Tier 1 Support",
+        "check": "stops at Customer Identified?; no classifier, no agent, no QA"
+      }
+    }
+  ]
+}

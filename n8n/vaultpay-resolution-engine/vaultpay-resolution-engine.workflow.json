@@ -1,0 +1,1615 @@
+{
+  "name": "VaultPay Resolution Engine",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "vaultpay-ticket",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "56d9cc0c-bcd5-47c5-8ad0-6ea26836f8ce",
+      "name": "Ticket Intake Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -1200,
+        1040
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// DETERMINISTIC LAYER 1 - PII scrubbing. Nothing reaches an LLM before this runs.\nconst results = [];\nfor (const item of $input.all()) {\n  const b = item.json.body ?? item.json;\n  const email = String(b.email ?? b.from ?? '').trim().toLowerCase();\n  const subject = String(b.subject ?? '');\n  const raw = String(b.message ?? b.text ?? b.description ?? b.body ?? '');\n  const flags = [];\n  let msg = raw;\n\n  const rules = [\n    ['PAN', /\\b(?:\\d[ -]?){15,18}\\d\\b/g],\n    ['CVV', /\\b(?:cvv|cvc|security\\s*code)\\D{0,10}\\d{3,4}\\b/gi],\n    ['PIN', /\\bpin\\D{0,10}\\d{4,6}\\b/gi],\n    ['SSN', /\\b\\d{3}-\\d{2}-\\d{4}\\b/g],\n    ['CARD_EXPIRY', /\\b(?:exp(?:iry|ires|iration)?)\\D{0,8}\\d{2}\\s*[\\/-]\\s*\\d{2,4}\\b/gi],\n    ['ACCOUNT_NUMBER', /\\b(?:acct|account|a\\/c|routing)\\s*(?:no\\.?|number|#)?\\s*[:#]?\\s*\\d{6,14}\\b/gi],\n    ['IBAN', /\\b[A-Z]{2}\\d{2}[A-Z0-9]{11,30}\\b/g]\n  ];\n\n  for (const rule of rules) {\n    const label = rule[0];\n    const re = rule[1];\n    if (re.test(msg)) { flags.push(label); }\n    re.lastIndex = 0;\n    msg = msg.replace(re, '[' + label + '_REDACTED]');\n  }\n\n  results.push({\n    json: {\n      ticket_id: 'VP-' + Date.now() + '-' + Math.floor(Math.random() * 10000),\n      received_at: new Date().toISOString(),\n      email,\n      subject,\n      message: msg,\n      pii_detected: flags.length > 0,\n      pii_types: flags,\n      chars_removed: raw.length - msg.length\n    }\n  });\n}\nreturn results;"
+      },
+      "id": "09443867-263b-48ce-a50f-518c00722567",
+      "name": "Sanitize PII",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -976,
+        1040
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://YOUR-VAULTPAY-API/customer",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "email",
+              "value": "={{ $json.email }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 15000
+        }
+      },
+      "id": "9f10d780-4b87-490a-8ee3-15f2a52ebe3f",
+      "name": "Fetch Customer Record",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        -752,
+        1040
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.statusCode }}",
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              },
+              "rightValue": 200
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "37a20fc5-e7ae-4dfe-889e-145da7085f13",
+      "name": "Customer Identified?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -528,
+        1040
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// DETERMINISTIC LAYER 2 - tier limits come from code, never from the model.\nconst TIERS = {\n  standard: { dispute_credit_cap: 50, refund_cap: 35, overdraft_fee: 35, overdraft_max_per_day: 3,\n    card_sla: '3-5 business days by standard mail; expedited shipping available for a 15 dollar fee',\n    virtual_card: 'available on request for a 3 dollar fee',\n    investigation_days: 10, provisional_credit: 'after 10 business days of investigation',\n    refund_processing: '3-5 business days after approval', support_channel: 'standard email and chat queue' },\n  gold: { dispute_credit_cap: 200, refund_cap: 75, overdraft_fee: 25, overdraft_max_per_day: 2,\n    card_sla: '1-2 business days by expedited mail at no extra charge',\n    virtual_card: 'issued automatically at no charge',\n    investigation_days: 5, provisional_credit: 'after 5 business days of investigation',\n    refund_processing: '1-2 business days after approval', support_channel: 'priority queue with callback service' },\n  premium: { dispute_credit_cap: 500, refund_cap: 150, overdraft_fee: 0, overdraft_max_per_day: 0,\n    card_sla: 'same business day by courier where available, next business day otherwise, no extra charge',\n    virtual_card: 'issued automatically at no charge',\n    investigation_days: 1, provisional_credit: 'within 24 hours of verified dispute submission',\n    refund_processing: 'same business day if approved before 3:00 PM ET, next business day otherwise',\n    support_channel: 'dedicated relationship manager and 24/7 priority hotline' }\n};\n\nconst t = $('Sanitize PII').first().json;\nconst out = [];\nfor (const item of $input.all()) {\n  const c = item.json.body ?? item.json;\n  const rawTier = String(c.tier ?? c.account_tier ?? c.customer_tier ?? 'standard').toLowerCase().trim();\n  const tier = TIERS[rawTier] ? rawTier : 'standard';\n  const limits = TIERS[tier];\n  const status = String(c.account_status ?? c.status ?? 'active').toLowerCase();\n  const balance = Number(c.balance ?? c.current_balance ?? 0);\n\n  out.push({ json: {\n    ticket_id: t.ticket_id,\n    received_at: t.received_at,\n    email: t.email,\n    subject: t.subject,\n    message: t.message,\n    pii_detected: t.pii_detected,\n    pii_types: t.pii_types,\n    customer_id: String(c.customer_id ?? c.id ?? ''),\n    customer_name: String(c.name ?? c.full_name ?? ''),\n    tier,\n    tier_label: tier.charAt(0).toUpperCase() + tier.slice(1),\n    account_status: status,\n    balance,\n    account_healthy: status === 'active' && balance >= 0,\n    dispute_credit_cap: limits.dispute_credit_cap,\n    refund_cap: limits.refund_cap,\n    overdraft_fee: limits.overdraft_fee,\n    overdraft_max_per_day: limits.overdraft_max_per_day,\n    card_sla: limits.card_sla,\n    virtual_card: limits.virtual_card,\n    investigation_days: limits.investigation_days,\n    provisional_credit: limits.provisional_credit,\n    refund_processing: limits.refund_processing,\n    support_channel: limits.support_channel,\n    customer_raw: c\n  } });\n}\nreturn out;"
+      },
+      "id": "5d77c4b9-2bfe-4519-ad59-2fb4011a8743",
+      "name": "Build Tier Policy Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -304,
+        656
+      ]
+    },
+    {
+      "parameters": {
+        "inputText": "=Subject: {{ $json.subject }}\nMessage: {{ $json.message }}",
+        "categories": {
+          "categories": [
+            {
+              "category": "POLICY_QUESTION",
+              "description": "The customer is asking how a VaultPay policy works - fees, tiers, timelines, eligibility, overdraft protection, what happens if. No money movement is being requested."
+            },
+            {
+              "category": "TRANSACTION_DISPUTE",
+              "description": "The customer is disputing a specific card or account transaction - unauthorised, unrecognised, duplicate charge, goods not delivered, wrong amount, subscription not cancelled."
+            },
+            {
+              "category": "LOST_OR_STOLEN_CARD",
+              "description": "The customer reports their physical card lost, stolen, misplaced or possibly compromised, or asks for it to be blocked or replaced."
+            },
+            {
+              "category": "REFUND_REQUEST",
+              "description": "The customer is asking VaultPay to give money back for a fee or charge - overdraft fee refund, monthly fee refund, transfer fee refund, or a refund on a merchant purchase."
+            }
+          ]
+        },
+        "options": {
+          "multiClass": false,
+          "fallback": "other"
+        }
+      },
+      "id": "26af82b2-1ce0-464a-8428-5ddf14d873bf",
+      "name": "Classify Ticket Intent",
+      "type": "@n8n/n8n-nodes-langchain.textClassifier",
+      "typeVersion": 1.1,
+      "position": [
+        -240,
+        736
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const t = $('Sanitize PII').first().json;\nreturn [{ json: {\n  ticket_id: t.ticket_id,\n  email: t.email,\n  status: 'ESCALATED',\n  escalation_team: 'Tier 1 Support',\n  escalation_reason: 'No VaultPay account matches the email on this ticket. Identity must be verified by a human agent.',\n  customer_message: 'Thanks for contacting VaultPay. We could not match your email to an account, so a support specialist will take over and verify your identity before we can discuss account details.',\n  automated: false\n} }];"
+      },
+      "id": "113719ad-ce1c-4d4a-bc28-e63ff9f99d2a",
+      "name": "Unknown Customer Escalation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3616,
+        1504
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Single escalation exit. Every deterministic guardrail and every QA failure lands here.\n// The predecessor may be an HTTP node (card block/replace), whose output is the API\n// response rather than the ticket. So resolve context from whichever guardrail ran.\nconst SOURCES = [\n  'Enforce QA Verdict',\n  'Dispute Guardrails',\n  'Lost Card Triage',\n  'Refund Guardrails',\n  'Unclassified Intent',\n  'Unknown Customer Escalation',\n  'Build Tier Policy Context'\n];\n\nfunction lookup(name) {\n  try {\n    const j = $(name).first().json;\n    return j && typeof j === 'object' ? j : null;\n  } catch (e) {\n    return null;\n  }\n}\n\nlet ctx = {};\nfor (const name of SOURCES) {\n  const j = lookup(name);\n  if (j && (j.ticket_id || j.escalation_reason)) { ctx = j; break; }\n}\n\nconst actions = [];\nif (lookup('Block Card (Fraud Dispute)')) { actions.push('card_blocked'); }\nif (lookup('Block Card')) { actions.push('card_blocked'); }\nif (lookup('Order Replacement Card')) { actions.push('replacement_card_ordered'); }\n\nconst out = [];\nfor (const item of $input.all()) {\n  const d = (item.json && typeof item.json === 'object') ? item.json : {};\n  const pick = (key) => {\n    const v = d[key];\n    if (v !== undefined && v !== null && v !== '') { return v; }\n    const c = ctx[key];\n    return (c === undefined) ? null : c;\n  };\n\n  const team = pick('escalation_team') || 'Tier 2 Support';\n  const reason = pick('escalation_reason') || 'Policy requires human review for this request.';\n  const customerMessage = pick('customer_message') || ('Thanks for contacting VaultPay. Your ticket needs a specialist to look at it personally, so I have passed it to our ' + team + ' team. They will be in touch shortly. Nothing further is needed from you right now.');\n\n  out.push({ json: {\n    ticket_id: pick('ticket_id'),\n    status: 'ESCALATED_TO_HUMAN',\n    escalated: true,\n    escalation_team: team,\n    escalation_reason: reason,\n    tier: d.tier_label ?? d.tier ?? ctx.tier_label ?? ctx.tier ?? null,\n    customer_id: pick('customer_id'),\n    intent: pick('intent'),\n    qa_risk: pick('qa_risk'),\n    violations: d.violations ?? ctx.violations ?? [],\n    actions_taken: actions,\n    response: customerMessage\n  } });\n}\nreturn out;"
+      },
+      "id": "99fc9d0f-e84f-4464-909a-673e2fa3f22a",
+      "name": "Build Escalation Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3840,
+        720
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Ticket {{ $json.ticket_id }} from {{ $json.customer_name }}.\nSubject: {{ $json.subject }}\nMessage: {{ $json.message }}",
+        "options": {
+          "systemMessage": "=You are the VaultPay policy specialist. You answer customer policy questions using ONLY the VaultPay internal policy documents reachable through your knowledge base tools.\n\nCUSTOMER CONTEXT (authoritative, retrieved live from the core banking system - never contradict it):\n- Customer id: {{ $json.customer_id }}\n- Tier: {{ $json.tier_label }}\n- Account status: {{ $json.account_status }}\n- Overdraft fee for this tier: {{ $json.overdraft_fee }} dollars per occurrence\n- Card replacement SLA: {{ $json.card_sla }}\n- Temporary virtual card: {{ $json.virtual_card }}\n- Dispute investigation: {{ $json.investigation_days }} business days\n- Support channel: {{ $json.support_channel }}\n\nRULES\n1. Always search the knowledge base tools before answering. Never answer from general banking knowledge or from the public internet.\n2. If the policy documents do not cover the question, say so plainly and say a human agent will follow up. Do not invent a policy.\n3. Answer for THIS customer tier only. Do not quote another tier unless the customer asks to compare.\n4. You may explain fees, timelines and eligibility. You must NOT promise a refund, a fee waiver, a credit, or the outcome of any investigation.\n5. Never state or repeat card numbers, PINs or account numbers. Redaction markers in the message stay redacted.\n6. Write a finished customer-facing reply: warm, plain English, no internal document ids, no bullet dump. 120 words or fewer.\n7. End by naming the exact policy area you relied on, for example: This is based on our overdraft policy.",
+          "maxIterations": 8,
+          "enableStreaming": false
+        }
+      },
+      "id": "bda27fd2-228f-41bf-85ac-a742fb6ae7f2",
+      "name": "Policy Answer Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1744,
+        -528
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "retrieve-as-tool",
+        "toolDescription": "Search VaultPay policy VP-TIER-001 (Account Tiers). Use for questions about Standard, Gold and Premium benefits, monthly fees, eligibility, SLAs and the limits that apply to automated systems.",
+        "pineconeIndex": {
+          "__rl": true,
+          "mode": "list",
+          "value": "vaultpay-policy-docs",
+          "cachedResultName": "vaultpay-policy-docs"
+        },
+        "options": {
+          "metadata": {
+            "metadataValues": [
+              {
+                "name": "category",
+                "value": "account_tiers"
+              }
+            ]
+          }
+        }
+      },
+      "id": "2c8fe3e5-2da8-43aa-b1a5-aebb7ae3c4fa",
+      "name": "KB Account Tiers",
+      "type": "@n8n/n8n-nodes-langchain.vectorStorePinecone",
+      "typeVersion": 1.3,
+      "position": [
+        1312,
+        -304
+      ]
+    },
+    {
+      "parameters": {
+        "options": {
+          "dimensions": 1536
+        }
+      },
+      "id": "d572b032-b6f6-43c5-ab98-3b7c24ddab16",
+      "name": "Policy Embeddings",
+      "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        1968,
+        -96
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "retrieve-as-tool",
+        "toolDescription": "Search VaultPay policy VP-OD-002 (Overdraft Policy). Use for overdraft fees, overdraft protection, transfer fees, first-time fee waivers and the conditions under which a waiver may be applied.",
+        "pineconeIndex": {
+          "__rl": true,
+          "mode": "list",
+          "value": "vaultpay-policy-docs",
+          "cachedResultName": "vaultpay-policy-docs",
+          "cachedResultUrl": ""
+        },
+        "options": {
+          "metadata": {
+            "metadataValues": [
+              {
+                "name": "category",
+                "value": "overdraft_policy"
+              }
+            ]
+          }
+        }
+      },
+      "id": "b6a25711-2479-4f51-a8b1-76f01f6b0416",
+      "name": "KB Overdraft Policy",
+      "type": "@n8n/n8n-nodes-langchain.vectorStorePinecone",
+      "typeVersion": 1.3,
+      "position": [
+        1600,
+        -304
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "retrieve-as-tool",
+        "toolDescription": "Search VaultPay policy VP-CARD-003 (Lost and Stolen Card Policy). Use for card blocking, replacement SLAs, temporary virtual cards, pending transaction handling and Zero Liability Protection.",
+        "pineconeIndex": {
+          "__rl": true,
+          "mode": "list",
+          "value": "vaultpay-policy-docs",
+          "cachedResultName": "vaultpay-policy-docs"
+        },
+        "options": {
+          "metadata": {
+            "metadataValues": [
+              {
+                "name": "category",
+                "value": "lost_card_policy"
+              }
+            ]
+          }
+        }
+      },
+      "id": "4dc3858c-21d1-4050-adee-e86c5a23ffbf",
+      "name": "KB Lost Card Policy",
+      "type": "@n8n/n8n-nodes-langchain.vectorStorePinecone",
+      "typeVersion": 1.3,
+      "position": [
+        1888,
+        -304
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "retrieve-as-tool",
+        "toolDescription": "Search VaultPay policy VP-DISP-004 (Transaction Dispute Resolution). Use for eligible dispute reasons, the 60 day window, conditional credit caps, investigation timelines and fraud dispute handling.",
+        "pineconeIndex": {
+          "__rl": true,
+          "mode": "list",
+          "value": "vaultpay-policy-docs",
+          "cachedResultName": "vaultpay-policy-docs"
+        },
+        "options": {
+          "metadata": {
+            "metadataValues": [
+              {
+                "name": "category",
+                "value": "dispute_resolution"
+              }
+            ]
+          }
+        }
+      },
+      "id": "f2fd4336-4a42-4c17-b259-d4e38a32e939",
+      "name": "KB Dispute Policy",
+      "type": "@n8n/n8n-nodes-langchain.vectorStorePinecone",
+      "typeVersion": 1.3,
+      "position": [
+        2176,
+        -304
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "retrieve-as-tool",
+        "toolDescription": "Search VaultPay policy VP-REF-005 (Refund Policy). Use for VaultPay fee refunds, why merchant charges are not refunded directly, automated approval caps, processing times and forbidden refund language.",
+        "pineconeIndex": {
+          "__rl": true,
+          "mode": "list",
+          "value": "vaultpay-policy-docs",
+          "cachedResultName": "vaultpay-policy-docs"
+        },
+        "options": {
+          "metadata": {
+            "metadataValues": [
+              {
+                "name": "category",
+                "value": "refund_policy"
+              }
+            ]
+          }
+        }
+      },
+      "id": "e6f45a1b-dd9e-4e31-bff7-16307cd72098",
+      "name": "KB Refund Policy",
+      "type": "@n8n/n8n-nodes-langchain.vectorStorePinecone",
+      "typeVersion": 1.3,
+      "position": [
+        2464,
+        -304
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "draft",
+              "name": "draft",
+              "value": "={{ $json.output }}",
+              "type": "string"
+            },
+            {
+              "id": "ticket",
+              "name": "ticket_id",
+              "value": "={{ $('Build Tier Policy Context').first().json.ticket_id }}",
+              "type": "string"
+            },
+            {
+              "id": "tier",
+              "name": "tier_label",
+              "value": "={{ $('Build Tier Policy Context').first().json.tier_label }}",
+              "type": "string"
+            },
+            {
+              "id": "cid",
+              "name": "customer_id",
+              "value": "={{ $('Build Tier Policy Context').first().json.customer_id }}",
+              "type": "string"
+            },
+            {
+              "id": "dcap",
+              "name": "dispute_credit_cap",
+              "value": "={{ $('Build Tier Policy Context').first().json.dispute_credit_cap }}",
+              "type": "number"
+            },
+            {
+              "id": "rcap",
+              "name": "refund_cap",
+              "value": "={{ $('Build Tier Policy Context').first().json.refund_cap }}",
+              "type": "number"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "329c297d-9d4e-4bfe-bf1b-0015f29db559",
+      "name": "Collect Draft Reply",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2816,
+        -320
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// DETERMINISTIC LAYER 3 - fraud detection and tier cap enforcement happen BEFORE the agent runs.\nconst out = [];\nfor (const item of $input.all()) {\n  const d = item.json;\n  const text = String(d.message ?? '').toLowerCase();\n\n  const fraudTerms = ['unauthorised','unauthorized','fraud','fraudulent','did not make','didn\\'t make','dont recognise','don\\'t recognise','dont recognize','don\\'t recognize','not recognise','not recognize','not mine','someone else','stolen','hacked','compromised','identity theft'];\n  let fraud = false;\n  for (const term of fraudTerms) { if (text.includes(term)) { fraud = true; } }\n\n  const amounts = [];\n  const re = /\\$\\s*([0-9]{1,3}(?:,[0-9]{3})*(?:\\.[0-9]{1,2})?)/g;\n  let m = re.exec(text);\n  while (m) { amounts.push(Number(m[1].replace(/,/g, ''))); m = re.exec(text); }\n  if (amounts.length === 0) {\n    const re2 = /([0-9]{1,3}(?:,[0-9]{3})*(?:\\.[0-9]{2}))\\s*(?:dollars|usd)/g;\n    let m2 = re2.exec(text);\n    while (m2) { amounts.push(Number(m2[1].replace(/,/g, ''))); m2 = re2.exec(text); }\n  }\n  const amount = amounts.length ? Math.max.apply(null, amounts) : null;\n\n  const cap = Number(d.dispute_credit_cap);\n  const overCap = amount !== null && amount > cap;\n  const suspended = d.account_status !== 'active';\n\n  const reasons = [];\n  if (fraud) { reasons.push('Unrecognised or unauthorised transaction - VP-DISP-004 requires immediate routing to Fraud Investigation and forbids conditional credit until fraud confirms the transaction was not made by the account holder.'); }\n  if (overCap) { reasons.push('Disputed amount of ' + amount + ' dollars exceeds the ' + d.tier_label + ' conditional credit cap of ' + cap + ' dollars.'); }\n  if (suspended) { reasons.push('Account status is ' + d.account_status + ' - human review required before any credit.'); }\n\n  out.push({ json: Object.assign({}, d, {\n    intent: 'TRANSACTION_DISPUTE',\n    disputed_amount: amount,\n    fraud_suspected: fraud,\n    over_tier_cap: overCap,\n    requires_human: fraud || overCap || suspended,\n    escalation_team: fraud ? 'Fraud Investigation' : 'Tier 2 Support',\n    escalation_reason: reasons.join(' '),\n    allowed_credit: fraud ? 0 : Math.min(amount === null ? cap : amount, cap)\n  }) });\n}\nreturn out;"
+      },
+      "id": "a3aa45c8-2f7a-4fd4-abae-5ca634550b44",
+      "name": "Dispute Guardrails",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.requires_human }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "433ee30b-8e94-49d7-964c-4f54d8877250",
+      "name": "Dispute Needs Human?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        944,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://YOUR-VAULTPAY-API/card/{{ $json.customer_id }}/block",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 15000
+        }
+      },
+      "id": "a6244081-f591-435e-b42f-71fb08bd6363",
+      "name": "Block Card (Fraud Dispute)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        3616,
+        32
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Ticket {{ $json.ticket_id }} from {{ $json.customer_name }}.\nSubject: {{ $json.subject }}\nMessage: {{ $json.message }}\nDetected disputed amount: {{ $json.disputed_amount }}",
+        "options": {
+          "systemMessage": "=You are the VaultPay transaction dispute specialist. You resolve non-fraud disputes end to end.\n\nCUSTOMER CONTEXT (authoritative, do not contradict, do not recompute):\n- Customer id: {{ $json.customer_id }} (use this exact value for every tool call)\n- Tier: {{ $json.tier_label }}\n- Conditional credit cap for this tier: {{ $json.dispute_credit_cap }} dollars\n- Maximum credit this ticket is cleared for: {{ $json.allowed_credit }} dollars\n- Investigation window: {{ $json.investigation_days }} business days\n- Provisional credit timing: {{ $json.provisional_credit }}\n\nA deterministic guardrail has already cleared this ticket as non-fraud and within cap. If anything in the message now looks like fraud or an unrecognised transaction, do NOT issue credit - say a specialist will take over.\n\nPROCESS\n1. Search the dispute knowledge base for the rules that apply to this dispute reason and confirm the 60 day eligibility window.\n2. Use Get Recent Transactions to find the transaction and its transaction_id.\n3. If the dispute is eligible and the amount is at or below the cleared maximum above, call Issue Conditional Credit once with that transaction_id and amount.\n4. Never issue credit above the cleared maximum. Never call the credit tool twice.\n5. Never guarantee the outcome of the investigation. Say the credit is conditional and may be reversed if the dispute is resolved in favour of the merchant.\n6. Never state card numbers, PINs or account numbers.\n7. Reply to the customer in warm plain English, 140 words or fewer, stating what you did, the conditional credit amount if any, and the investigation timeline for their tier.",
+          "maxIterations": 10,
+          "enableStreaming": false
+        }
+      },
+      "id": "a82eb844-9373-43e1-a23d-97eee6e18ec9",
+      "name": "Dispute Resolution Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1824,
+        176
+      ]
+    },
+    {
+      "parameters": {
+        "toolDescription": "Fetch the customer recent transactions from the VaultPay core banking API. Use it to locate the transaction the customer is describing and to read its transaction_id, amount, merchant and posting date.",
+        "url": "https://YOUR-VAULTPAY-API/customer/{customer_id}/transactions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "placeholderDefinitions": {
+          "values": [
+            {
+              "name": "customer_id",
+              "description": "The VaultPay customer id given to you in your system instructions",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "id": "d011c8d7-dfda-4091-a88d-927c2df59289",
+      "name": "Get Recent Transactions",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [
+        1840,
+        416
+      ]
+    },
+    {
+      "parameters": {
+        "toolDescription": "Issue a provisional conditional credit on a transaction dispute. Only call this for a non-fraud dispute and only for an amount at or below the tier cap stated in your system instructions. Never call it for an unrecognised or fraudulent transaction.",
+        "method": "POST",
+        "url": "https://YOUR-VAULTPAY-API/dispute/credit",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"customer_id\": \"{customer_id}\", \"transaction_id\": \"{transaction_id}\", \"amount\": {amount}}",
+        "placeholderDefinitions": {
+          "values": [
+            {
+              "name": "customer_id",
+              "description": "The VaultPay customer id given to you in your system instructions",
+              "type": "string"
+            },
+            {
+              "name": "transaction_id",
+              "description": "The id of the disputed transaction",
+              "type": "string"
+            },
+            {
+              "name": "amount",
+              "description": "Conditional credit amount in dollars, must not exceed the tier cap",
+              "type": "number"
+            }
+          ]
+        }
+      },
+      "id": "b4f5ac72-9a78-451e-9ef9-afe9d1a7880d",
+      "name": "Issue Conditional Credit",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [
+        1968,
+        416
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// DETERMINISTIC LAYER 3 - VP-CARD-003 requires the card to be blocked before any other action.\nconst out = [];\nfor (const item of $input.all()) {\n  const d = item.json;\n  const text = String(d.message ?? '').toLowerCase();\n  const suspiciousTerms = ['suspicious','charges i did not','charges i didn\\'t','unauthorised','unauthorized','fraud','someone used','strange transactions','unknown transactions','zero liability'];\n  let suspicious = false;\n  for (const term of suspiciousTerms) { if (text.includes(term)) { suspicious = true; } }\n\n  out.push({ json: Object.assign({}, d, {\n    intent: 'LOST_OR_STOLEN_CARD',\n    suspicious_activity: suspicious,\n    requires_human: suspicious,\n    escalation_team: 'Fraud Investigation',\n    escalation_reason: suspicious ? 'Customer reported a lost or stolen card together with suspicious or unauthorised transactions. VP-CARD-003 requires immediate escalation to Fraud Investigation and forbids an automated Zero Liability decision. The card has been blocked.' : '',\n    auto_virtual_card: d.tier === 'gold' || d.tier === 'premium'\n  }) });\n}\nreturn out;"
+      },
+      "id": "87248644-3c9d-4101-aef3-d37dcdbaf1bc",
+      "name": "Lost Card Triage",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        272,
+        592
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://YOUR-VAULTPAY-API/card/{{ $json.customer_id }}/block",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 15000
+        }
+      },
+      "id": "0e9a84e0-2c99-45fd-9f41-86e32ead12b3",
+      "name": "Block Card",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        496,
+        592
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://YOUR-VAULTPAY-API/card/{{ $('Lost Card Triage').item.json.customer_id }}/replace",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 15000
+        }
+      },
+      "id": "a91d4db8-68ff-46ed-afe7-3c81bfd14ed0",
+      "name": "Order Replacement Card",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        720,
+        592
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $('Lost Card Triage').item.json.requires_human }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a9cbb207-6b88-44a9-91b1-c28dbed8a5f6",
+      "name": "Card Fraud Escalation?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        944,
+        592
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Ticket {{ $('Lost Card Triage').item.json.ticket_id }} from {{ $('Lost Card Triage').item.json.customer_name }}.\nSubject: {{ $('Lost Card Triage').item.json.subject }}\nMessage: {{ $('Lost Card Triage').item.json.message }}",
+        "options": {
+          "systemMessage": "=You are the VaultPay card services specialist.\n\nALREADY DONE BY THE SYSTEM before you were called - state these as completed facts, do not offer to do them:\n- The card has been blocked.\n- A replacement card has been ordered.\n\nCUSTOMER CONTEXT (authoritative):\n- Customer id: {{ $('Lost Card Triage').item.json.customer_id }}\n- Tier: {{ $('Lost Card Triage').item.json.tier_label }}\n- Replacement SLA for this tier: {{ $('Lost Card Triage').item.json.card_sla }}\n- Temporary virtual card for this tier: {{ $('Lost Card Triage').item.json.virtual_card }}\n\nRULES\n1. Search the lost card knowledge base before answering so the details you give match VP-CARD-003.\n2. Confirm the block and the replacement, then give the SLA and the virtual card position for THIS tier only.\n3. Explain pending transaction handling if it is relevant: pending transactions under 10 dollars are auto-cancelled, 10 dollars and above are held pending investigation.\n4. You must NOT decide a Zero Liability claim. If the customer mentions transactions they did not make, say a specialist will review those specific transactions.\n5. Never state card numbers or PINs.\n6. Reply in warm plain English, 130 words or fewer.",
+          "maxIterations": 8,
+          "enableStreaming": false
+        }
+      },
+      "id": "0a18330a-2a90-4557-b9c7-7d03f9fa51d9",
+      "name": "Lost Card Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1824,
+        576
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// DETERMINISTIC LAYER 3 - VP-REF-005 escalation triggers and automated approval caps.\nconst out = [];\nfor (const item of $input.all()) {\n  const d = item.json;\n  const text = String(d.message ?? '').toLowerCase();\n\n  const merchantTerms = ['merchant','store','shop','seller','vendor','retailer','amazon','netflix','spotify','uber','subscription','order never','never arrived','did not arrive','goods','purchase from'];\n  let merchant = false;\n  for (const term of merchantTerms) { if (text.includes(term)) { merchant = true; } }\n\n  const feeTerms = ['overdraft fee','monthly fee','maintenance fee','transfer fee','service fee','bank fee','account fee'];\n  let vaultpayFee = false;\n  for (const term of feeTerms) { if (text.includes(term)) { vaultpayFee = true; } }\n\n  const negligenceTerms = ['negligence','your staff','your agent lied','sued','lawyer','legal action','fraud by your','scammed me'];\n  let negligence = false;\n  for (const term of negligenceTerms) { if (text.includes(term)) { negligence = true; } }\n\n  const amounts = [];\n  const re = /\\$\\s*([0-9]{1,3}(?:,[0-9]{3})*(?:\\.[0-9]{1,2})?)/g;\n  let m = re.exec(text);\n  while (m) { amounts.push(Number(m[1].replace(/,/g, ''))); m = re.exec(text); }\n  const amount = amounts.length ? Math.max.apply(null, amounts) : null;\n\n  const cap = Number(d.refund_cap);\n  const overCap = amount !== null && amount > cap;\n  const badStanding = d.account_status !== 'active' || Number(d.balance) < 0;\n\n  const reasons = [];\n  if (overCap) { reasons.push('Requested refund of ' + amount + ' dollars exceeds the ' + d.tier_label + ' automated approval cap of ' + cap + ' dollars - VP-REF-005 requires Tier 2 approval.'); }\n  if (negligence) { reasons.push('Message contains language suggesting fraud or staff negligence - VP-REF-005 mandatory escalation trigger.'); }\n  if (badStanding) { reasons.push('Account is suspended or overdrawn - VP-REF-005 forbids automated refund processing.'); }\n\n  out.push({ json: Object.assign({}, d, {\n    intent: 'REFUND_REQUEST',\n    requested_amount: amount,\n    merchant_charge: merchant && !vaultpayFee,\n    vaultpay_fee: vaultpayFee,\n    over_refund_cap: overCap,\n    negligence_language: negligence,\n    requires_human: overCap || negligence || badStanding,\n    escalation_team: 'Tier 2 Support',\n    escalation_reason: reasons.join(' '),\n    allowed_refund: Math.min(amount === null ? cap : amount, cap)\n  }) });\n}\nreturn out;"
+      },
+      "id": "8645cff4-89ee-4546-849b-0a98a27db1ec",
+      "name": "Refund Guardrails",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        896
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.requires_human }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a9a2139f-e749-4850-98f9-cf5aa0f23aab",
+      "name": "Refund Needs Human?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        944,
+        896
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Ticket {{ $json.ticket_id }} from {{ $json.customer_name }}.\nSubject: {{ $json.subject }}\nMessage: {{ $json.message }}\nDetected amount: {{ $json.requested_amount }}",
+        "options": {
+          "systemMessage": "=You are the VaultPay refunds specialist. This is the highest liability path at VaultPay - a previous chatbot hallucinated a refund policy and cost the bank fifty thousand dollars. Be precise.\n\nCUSTOMER CONTEXT (authoritative):\n- Customer id: {{ $json.customer_id }} (use this exact value for every tool call)\n- Tier: {{ $json.tier_label }}\n- Automated refund approval cap for this tier: {{ $json.refund_cap }} dollars\n- Maximum refund this ticket is cleared for: {{ $json.allowed_refund }} dollars\n- Refund processing time for this tier: {{ $json.refund_processing }}\n- Guardrail read this as a merchant charge: {{ $json.merchant_charge }}\n\nRULES\n1. Search the refund knowledge base first. VaultPay refunds cover ONLY VaultPay fee errors, system processing errors and charges applied in error by VaultPay systems.\n2. If this is a merchant charge, you must NOT promise a VaultPay refund. Tell the customer to contact the merchant first and to file a transaction dispute if that fails. Do not call any tool.\n3. If it is a genuine VaultPay fee charged in error and the amount is at or below the cleared maximum above, call Issue Fee Refund once.\n4. Never exceed the cleared maximum. Never call the refund tool twice.\n5. FORBIDDEN phrases - never write any of these: we will refund you, your money is on its way, refund approved, you will receive your money back, guaranteed. Describe what has been submitted and its processing time instead.\n6. Never state card numbers, PINs or account numbers.\n7. Reply in warm plain English, 140 words or fewer.",
+          "maxIterations": 10,
+          "enableStreaming": false
+        }
+      },
+      "id": "7dc0e328-0385-4361-b7f0-04d8bfbc822a",
+      "name": "Refund Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1824,
+        1072
+      ]
+    },
+    {
+      "parameters": {
+        "toolDescription": "Issue a VaultPay fee refund for a fee charged in error. Only for VaultPay-originated fees, never for merchant charges, and only at or below the automated approval cap stated in your system instructions.",
+        "method": "POST",
+        "url": "https://YOUR-VAULTPAY-API/refund/fee",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"customer_id\": \"{customer_id}\", \"amount\": {amount}, \"reason\": \"{reason}\"}",
+        "placeholderDefinitions": {
+          "values": [
+            {
+              "name": "customer_id",
+              "description": "The VaultPay customer id given to you in your system instructions",
+              "type": "string"
+            },
+            {
+              "name": "amount",
+              "description": "Refund amount in dollars, must not exceed the tier cap",
+              "type": "number"
+            },
+            {
+              "name": "reason",
+              "description": "Short reason for the fee refund",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "id": "dea39676-ff4a-4de9-8eee-14221dca0378",
+      "name": "Issue Fee Refund",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [
+        1904,
+        1296
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const out = [];\nfor (const item of $input.all()) {\n  out.push({ json: Object.assign({}, item.json, {\n    intent: 'UNCLASSIFIED',\n    requires_human: true,\n    escalation_team: 'Tier 1 Support',\n    escalation_reason: 'The ticket did not match any supported resolution path with confidence. Routed to a human rather than guessed at.'\n  }) });\n}\nreturn out;"
+      },
+      "id": "c7a54afd-327e-477b-ba99-936e7a38ffc6",
+      "name": "Unclassified Intent",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3616,
+        1312
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Review this draft reply before it is sent to a VaultPay customer.\n\nAUTHORITATIVE FACTS FOR THIS CUSTOMER — every line below is verified from the core banking system and the VaultPay policy documents. Treat all of them as TRUE.\n- Tier: {{ $('Build Tier Policy Context').first().json.tier_label }}\n- Account status: {{ $('Build Tier Policy Context').first().json.account_status }}\n- Overdraft fee: {{ $('Build Tier Policy Context').first().json.overdraft_fee }} dollars per occurrence, maximum {{ $('Build Tier Policy Context').first().json.overdraft_max_per_day }} per calendar day\n- Conditional credit cap: {{ $('Build Tier Policy Context').first().json.dispute_credit_cap }} dollars\n- Automated refund approval cap: {{ $('Build Tier Policy Context').first().json.refund_cap }} dollars\n- Card replacement SLA: {{ $('Build Tier Policy Context').first().json.card_sla }}\n- Temporary virtual card: {{ $('Build Tier Policy Context').first().json.virtual_card }}\n- Dispute investigation: {{ $('Build Tier Policy Context').first().json.investigation_days }} business days\n- Provisional credit timing: {{ $('Build Tier Policy Context').first().json.provisional_credit }}\n- Refund processing: {{ $('Build Tier Policy Context').first().json.refund_processing }}\n- Support channel: {{ $('Build Tier Policy Context').first().json.support_channel }}\n\nSTANDARD MECHANICS — also true, and stating any of them is never a violation:\n- On a card reported lost or stolen, the card is blocked within seconds and a replacement is dispatched per the tier SLA above.\n- Pending transactions under 10 dollars on a blocked card are automatically cancelled. Pending transactions of 10 dollars or more are placed on hold pending investigation.\n- Disputes must be raised within 60 days of the transaction posting date.\n- A first-time overdraft fee waiver may be available to a customer with no overdraft in the previous 12 months.\n\nThe draft was written by an agent that retrieved VaultPay's own internal policy documents. Specific, accurate policy detail is EXPECTED and is never on its own a violation.\n\nDRAFT REPLY:\n{{ $json.draft }}",
+        "hasOutputParser": true,
+        "messages": {
+          "messageValues": [
+            {
+              "message": "You are the VaultPay compliance QA reviewer. You are the last line of defence before a reply reaches a customer. Judge the draft only against the rules below and return the required JSON.\n\nYour job is to catch replies that are WRONG or that OVERPROMISE MONEY. It is not to make replies vague. A detailed, accurate, tier-correct answer is exactly what VaultPay wants, and you must approve it. Describing standard account mechanics — a card being blocked, a replacement being dispatched, pending transactions being cancelled or held — is factual operational information, NOT a promise and NOT a refund. Never reject a draft for stating those.\n\nREJECT the draft only if one of these is true:\n1. It promises, confirms or guarantees that MONEY WILL BE RETURNED to the customer — a refund, a credit, a fee waiver, or the outcome of an investigation. Forbidden phrasings: we will refund you, your money is on its way, refund approved, you will receive your money back, guaranteed. Saying a waiver or conditional credit MAY be available subject to review is allowed. This rule is about money moving back to the customer and nothing else.\n2. The customer is disputing a MERCHANT charge and the draft offers a VaultPay refund for it instead of directing them to the merchant first and then to a transaction dispute. This rule applies only when a merchant charge is actually in question. Do not apply it to card blocking, replacements, pending transactions, or bank fees.\n3. It states a credit or refund amount above the caps in the authoritative facts.\n4. It decides a Zero Liability or fraud claim, or tells the customer a fraud claim is resolved in their favour.\n5. It states a fee, SLA, cap or timeline that CONTRADICTS the authoritative facts, or quotes figures belonging to a different tier.\n6. It contains a card number, PIN, CVV, account number or any unredacted financial identifier.\n7. It is rude, dismissive, blaming or unprofessional in tone.\n8. It cites a source outside VaultPay's own policy documents, or states a policy that contradicts the authoritative facts or the standard mechanics. Being specific is NOT a violation — only being wrong is. Do not reject a draft merely because a detail does not appear in this prompt; the agent has access to the full policy documents and you do not.\n\nBefore rejecting, check the offending text against the authoritative facts and standard mechanics above. If it agrees with them, approve.\n\nIf the draft is clean, set approved to true, risk to low, violations to an empty array, and copy the draft unchanged into revised_response.\nIf it breaks a rule, set approved to false, list each violation naming the rule number and the offending text, set risk to medium or high, and put a compliant rewrite in revised_response that keeps all the correct detail and fixes only the violation."
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "id": "19b9a4c2-54e0-4983-9bdd-bbcd25a923ef",
+      "name": "QA Guardrail Review",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        3040,
+        -320
+      ]
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\"approved\": true, \"risk\": \"low\", \"violations\": [\"short description of each rule broken\"], \"reasoning\": \"one sentence\", \"revised_response\": \"the corrected customer-facing reply\"}"
+      },
+      "id": "30516360-29f5-472d-8522-140c6a140705",
+      "name": "QA Verdict Schema",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        3184,
+        -96
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// DETERMINISTIC LAYER 4 - the model advises, code decides. A hard phrase scan runs regardless of the verdict.\nconst FORBIDDEN = [\n  'we will refund you','we will refund','your money is on its way','refund approved',\n  \"you'll receive your money back\",'you will receive your money back','money back guaranteed',\n  'i guarantee','we guarantee','guaranteed refund','rest assured you will get'\n];\nconst PII = [/\\b(?:\\d[ -]?){15,18}\\d\\b/, /\\bcvv\\D{0,10}\\d{3,4}\\b/i, /\\bpin\\D{0,10}\\d{4,6}\\b/i];\n\nconst out = [];\nfor (const item of $input.all()) {\n  const ctx = $('Collect Draft Reply').item.json;\n  const raw = item.json.output ?? item.json;\n  const verdict = typeof raw === 'string' ? JSON.parse(raw) : raw;\n\n  const draft = String(ctx.draft ?? '');\n  const lower = draft.toLowerCase();\n\n  const hardViolations = [];\n  for (const phrase of FORBIDDEN) {\n    if (lower.includes(phrase)) { hardViolations.push('Forbidden guarantee phrase in draft: \"' + phrase + '\"'); }\n  }\n  for (const re of PII) {\n    if (re.test(draft)) { hardViolations.push('Draft contains unredacted financial identifiers.'); }\n  }\n  if (!draft.trim()) { hardViolations.push('Draft reply was empty.'); }\n\n  const modelViolations = Array.isArray(verdict.violations) ? verdict.violations : [];\n  const approved = verdict.approved === true && hardViolations.length === 0;\n\n  out.push({ json: {\n    ticket_id: ctx.ticket_id,\n    customer_id: ctx.customer_id,\n    tier: ctx.tier_label,\n    intent: ctx.intent ?? null,\n    qa_approved: approved,\n    qa_risk: hardViolations.length ? 'high' : (verdict.risk ?? 'low'),\n    qa_reasoning: verdict.reasoning ?? '',\n    violations: hardViolations.concat(modelViolations),\n    final_response: approved ? draft : String(verdict.revised_response ?? draft),\n    escalation_team: 'Tier 2 Support',\n    escalation_reason: approved ? '' : 'Draft failed the automated QA guardrail: ' + hardViolations.concat(modelViolations).join(' | ')\n  } });\n}\nreturn out;"
+      },
+      "id": "3fd83079-2e50-439e-baee-8209603b6eb2",
+      "name": "Enforce QA Verdict",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3392,
+        -320
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.qa_approved }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d77ed8d2-3afe-4174-b54c-98b352611e63",
+      "name": "QA Passed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3616,
+        -320
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "tid",
+              "name": "ticket_id",
+              "value": "={{ $json.ticket_id }}",
+              "type": "string"
+            },
+            {
+              "id": "st",
+              "name": "status",
+              "value": "RESOLVED_BY_AI",
+              "type": "string"
+            },
+            {
+              "id": "tier",
+              "name": "tier",
+              "value": "={{ $json.tier }}",
+              "type": "string"
+            },
+            {
+              "id": "risk",
+              "name": "qa_risk",
+              "value": "={{ $json.qa_risk }}",
+              "type": "string"
+            },
+            {
+              "id": "msg",
+              "name": "response",
+              "value": "={{ $json.final_response }}",
+              "type": "string"
+            },
+            {
+              "id": "esc",
+              "name": "escalated",
+              "value": false,
+              "type": "boolean"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "5ac4beab-532e-4768-8005-0881568384b6",
+      "name": "Build Resolved Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3840,
+        -368
+      ]
+    },
+    {
+      "parameters": {
+        "options": {
+          "responseCode": 200,
+          "enableStreaming": false
+        }
+      },
+      "id": "fb09b4d7-4460-4b7f-875a-e7037997a101",
+      "name": "Respond Resolved",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        4064,
+        -368
+      ]
+    },
+    {
+      "parameters": {
+        "options": {
+          "responseCode": 202,
+          "enableStreaming": false
+        }
+      },
+      "id": "b6ab3f87-224e-499a-8c7c-951b1ed70d3f",
+      "name": "Respond Escalated",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        4064,
+        720
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4.1",
+          "mode": "list",
+          "cachedResultName": "gpt-4.1"
+        },
+        "builtInTools": {},
+        "options": {
+          "maxRetries": 2
+        }
+      },
+      "id": "b05bf1c0-1320-45d6-9a03-0fb7a90e3ad8",
+      "name": "Classifier Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        -80,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4.1",
+          "mode": "list",
+          "cachedResultName": "gpt-4.1"
+        },
+        "builtInTools": {},
+        "options": {
+          "maxRetries": 2
+        }
+      },
+      "id": "1c0e1865-6300-490b-bebb-d2a20113d527",
+      "name": "Resolution Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        688,
+        1504
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4.1",
+          "cachedResultName": "gpt-4.1"
+        },
+        "builtInTools": {},
+        "options": {
+          "temperature": 0,
+          "maxRetries": 2
+        }
+      },
+      "id": "e1a1083b-85da-4a7c-8af1-7e609c203f45",
+      "name": "QA Reviewer Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        1408,
+        240
+      ]
+    }
+  ],
+  "connections": {
+    "Ticket Intake Webhook": {
+      "main": [
+        [
+          {
+            "node": "Sanitize PII",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sanitize PII": {
+      "main": [
+        [
+          {
+            "node": "Fetch Customer Record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Customer Record": {
+      "main": [
+        [
+          {
+            "node": "Customer Identified?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Customer Identified?": {
+      "main": [
+        [
+          {
+            "node": "Build Tier Policy Context",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Unknown Customer Escalation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Tier Policy Context": {
+      "main": [
+        [
+          {
+            "node": "Classify Ticket Intent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify Ticket Intent": {
+      "main": [
+        [
+          {
+            "node": "Policy Answer Agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Dispute Guardrails",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Lost Card Triage",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Refund Guardrails",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Unclassified Intent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Unknown Customer Escalation": {
+      "main": [
+        [
+          {
+            "node": "Build Escalation Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Escalation Response": {
+      "main": [
+        [
+          {
+            "node": "Respond Escalated",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Policy Answer Agent": {
+      "main": [
+        [
+          {
+            "node": "Collect Draft Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "KB Account Tiers": {
+      "ai_tool": [
+        [
+          {
+            "node": "Policy Answer Agent",
+            "type": "ai_tool",
+            "index": 0
+          },
+          {
+            "node": "Dispute Resolution Agent",
+            "type": "ai_tool",
+            "index": 0
+          },
+          {
+            "node": "Lost Card Agent",
+            "type": "ai_tool",
+            "index": 0
+          },
+          {
+            "node": "Refund Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Policy Embeddings": {
+      "ai_embedding": [
+        [
+          {
+            "node": "KB Account Tiers",
+            "type": "ai_embedding",
+            "index": 0
+          },
+          {
+            "node": "KB Overdraft Policy",
+            "type": "ai_embedding",
+            "index": 0
+          },
+          {
+            "node": "KB Lost Card Policy",
+            "type": "ai_embedding",
+            "index": 0
+          },
+          {
+            "node": "KB Dispute Policy",
+            "type": "ai_embedding",
+            "index": 0
+          },
+          {
+            "node": "KB Refund Policy",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "KB Overdraft Policy": {
+      "ai_tool": [
+        [
+          {
+            "node": "Policy Answer Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "KB Lost Card Policy": {
+      "ai_tool": [
+        [
+          {
+            "node": "Policy Answer Agent",
+            "type": "ai_tool",
+            "index": 0
+          },
+          {
+            "node": "Lost Card Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "KB Dispute Policy": {
+      "ai_tool": [
+        [
+          {
+            "node": "Policy Answer Agent",
+            "type": "ai_tool",
+            "index": 0
+          },
+          {
+            "node": "Dispute Resolution Agent",
+            "type": "ai_tool",
+            "index": 0
+          },
+          {
+            "node": "Refund Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "KB Refund Policy": {
+      "ai_tool": [
+        [
+          {
+            "node": "Policy Answer Agent",
+            "type": "ai_tool",
+            "index": 0
+          },
+          {
+            "node": "Refund Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect Draft Reply": {
+      "main": [
+        [
+          {
+            "node": "QA Guardrail Review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dispute Guardrails": {
+      "main": [
+        [
+          {
+            "node": "Dispute Needs Human?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dispute Needs Human?": {
+      "main": [
+        [
+          {
+            "node": "Block Card (Fraud Dispute)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Dispute Resolution Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Block Card (Fraud Dispute)": {
+      "main": [
+        [
+          {
+            "node": "Build Escalation Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dispute Resolution Agent": {
+      "main": [
+        [
+          {
+            "node": "Collect Draft Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Recent Transactions": {
+      "ai_tool": [
+        [
+          {
+            "node": "Dispute Resolution Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Issue Conditional Credit": {
+      "ai_tool": [
+        [
+          {
+            "node": "Dispute Resolution Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lost Card Triage": {
+      "main": [
+        [
+          {
+            "node": "Block Card",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Block Card": {
+      "main": [
+        [
+          {
+            "node": "Order Replacement Card",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Order Replacement Card": {
+      "main": [
+        [
+          {
+            "node": "Card Fraud Escalation?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Card Fraud Escalation?": {
+      "main": [
+        [
+          {
+            "node": "Build Escalation Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Lost Card Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lost Card Agent": {
+      "main": [
+        [
+          {
+            "node": "Collect Draft Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Refund Guardrails": {
+      "main": [
+        [
+          {
+            "node": "Refund Needs Human?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Refund Needs Human?": {
+      "main": [
+        [
+          {
+            "node": "Build Escalation Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Refund Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Refund Agent": {
+      "main": [
+        [
+          {
+            "node": "Collect Draft Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Issue Fee Refund": {
+      "ai_tool": [
+        [
+          {
+            "node": "Refund Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Unclassified Intent": {
+      "main": [
+        [
+          {
+            "node": "Build Escalation Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "QA Guardrail Review": {
+      "main": [
+        [
+          {
+            "node": "Enforce QA Verdict",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "QA Verdict Schema": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "QA Guardrail Review",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enforce QA Verdict": {
+      "main": [
+        [
+          {
+            "node": "QA Passed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "QA Passed?": {
+      "main": [
+        [
+          {
+            "node": "Build Resolved Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Escalation Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Resolved Response": {
+      "main": [
+        [
+          {
+            "node": "Respond Resolved",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classifier Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Classify Ticket Intent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolution Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Policy Answer Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          },
+          {
+            "node": "Dispute Resolution Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          },
+          {
+            "node": "Lost Card Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          },
+          {
+            "node": "Refund Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "QA Reviewer Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "QA Guardrail Review",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true,
+    "binaryMode": "separate"
+  },
+  "description": "Autonomous VaultPay support resolution engine: PII sanitisation, live customer/tier lookup, intent routing, metadata-scoped Pinecone RAG, tool-calling agents bounded by tier caps, and a deterministic QA guardrail with human escalation."
+}
