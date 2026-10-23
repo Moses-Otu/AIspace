@@ -8,22 +8,22 @@ A single home for all my AI projects — and the source for my portfolio site.
 
 ## What is in here
 
-### Agentic systems — [`n8n/`](n8n)
+### Agentic systems — [`agentic-systems/`](agentic-systems)
 
-Production automation built in n8n. Each folder has a write-up of how the system works and why it
+Production AI systems — agents, retrieval pipelines and human-in-the-loop automation. Each folder has a write-up of how the system works and why it
 is built that way, plus sanitised workflow exports — **11 importable workflows, 191 nodes**, for
 every system except Media Clippings (not exposed for programmatic export) and the Lead Intelligence
 research sub-workflows.
 
 | Project | What it does |
 |---|---|
-| [Internal Audit Report Drafter](n8n/iard-audit-report-drafter) | Audit artefacts → formatted draft Word report, refined by chat, with a real approval gate |
-| [Opportunity Radar](n8n/opportunity-radar) | 12-stage research pipeline: ingest → abstract → pgvector retrieval → knockout → weighted scoring → one-pagers |
-| [Employee Engagement Pulse](n8n/engagement-pulse) | Weekly check-in with AI severity triage, escalation and a 2-day reminder sweep |
-| [Risk & Control Matrix Builder](n8n/rcm-builder) | Engagement intake → Drive corpus → FastAPI generation → reviewer approval |
-| [CreatorOS](n8n/creatoros-content-pipeline) | Five-agent content pipeline with structured-output contracts and a Slack send-and-wait gate |
-| [Automated Media Clippings](n8n/media-clippings) | Daily Brave sweep, agent selection, human curation, dedicated error handling |
-| [Lead Intelligence](n8n/lead-intelligence) | Buyer enrichment and scoring, plus a company-research agent layer |
+| [Internal Audit Report Drafter](agentic-systems/iard-audit-report-drafter) | Audit artefacts → formatted draft Word report, refined by chat, with a real approval gate |
+| [Opportunity Radar](agentic-systems/opportunity-radar) | 12-stage research pipeline: ingest → abstract → pgvector retrieval → knockout → weighted scoring → one-pagers |
+| [Employee Engagement Pulse](agentic-systems/engagement-pulse) | Weekly check-in with AI severity triage, escalation and a 2-day reminder sweep |
+| [Risk & Control Matrix Builder](agentic-systems/rcm-builder) | Engagement intake → Drive corpus → FastAPI generation → reviewer approval |
+| [CreatorOS](agentic-systems/creatoros-content-pipeline) | Five-agent content pipeline with structured-output contracts and a Slack send-and-wait gate |
+| [Automated Media Clippings](agentic-systems/media-clippings) | Daily Brave sweep, agent selection, human curation, dedicated error handling |
+| [Lead Intelligence](agentic-systems/lead-intelligence) | Buyer enrichment and scoring, plus a company-research agent layer |
 
 ### Applications and models
 
@@ -39,18 +39,18 @@ and the data-engineering projects listed on the portfolio page.
 
 ---
 
-## About the n8n exports
+## About the workflow exports
 
 Workflow JSON in this repository is sanitised, not raw. Before committing, exports are run through
 a script that:
 
 - removes every `credentials` block and `webhookId`
 - drops instance-specific metadata (`scopes`, `versionId`, `activeVersion`, internal IDs)
-- replaces the n8n instance hostname with `https://YOUR-N8N-HOST`
+- replaces the orchestration host with `https://YOUR-N8N-HOST`
 - replaces real email addresses with `example.com` equivalents
 - anonymises client and entity names
 
-To use one: import the JSON into n8n, reconnect your own credentials, and replace the placeholder
+To use one: import the JSON into your workflow orchestrator, reconnect your own credentials, and replace the placeholder
 host and channel IDs.
 
 Where a workflow is not exposed for programmatic export, the folder contains the architecture

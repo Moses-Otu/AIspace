@@ -1,4 +1,4 @@
-# n8n — Agentic Systems
+# Agentic Systems
 
 Production automation. Each folder documents one system: what it does, how it is put together,
 and the decisions that are not obvious from the node graph.

@@ -327,7 +327,7 @@
 
     <div class="stats rv">
       <div class="stat"><b class="count" data-to="7">7</b><span>production systems</span></div>
-      <div class="stat"><b class="count" data-to="337">337</b><span>n8n workflows built</span></div>
+      <div class="stat"><b class="count" data-to="337">337</b><span>AI workflows shipped</span></div>
       <div class="stat"><b class="count" data-to="28">28</b><span>public repositories</span></div>
     </div>
   </header>
@@ -335,65 +335,65 @@
   <section id="work">
     <div class="sec-head rv">
       <h2><i class="mono">01</i> Agentic systems</h2>
-      <div class="sec-note">Production n8n · 11 sanitised workflow exports in-repo</div>
+      <div class="sec-note">In production · full source for 11 workflows in-repo</div>
     </div>
 
-    <a class="item rv" href="https://github.com/Moses-Otu/AIspace/tree/main/n8n/iard-audit-report-drafter">
+    <a class="item rv" href="https://github.com/Moses-Otu/AIspace/tree/main/agentic-systems/iard-audit-report-drafter">
       <div class="item-top"><span class="num mono">01</span><span class="t">Internal Audit Report Drafter</span><span class="badge">5 workflows · full source</span><span class="arrow">→</span></div>
       <p class="d">Turns a completed audit working file, kick-off deck and notification into a formatted draft
       Word report. Every section is classified as verbatim, fill, or generated — the model only writes the one
       section it is allowed to, grounded strictly in supplied sources. Auditors then refine it by chat
       (“merge issue 3 and 4”, “re-rate this high”), with a change log and an approval gate that freezes the report.</p>
-      <div class="stack"><span>n8n</span><span>GPT-4.1</span><span>Supabase</span><span>FastAPI</span><span>python-docx</span></div>
+      <div class="stack"><span>LLM orchestration</span><span>GPT-4.1</span><span>Supabase</span><span>FastAPI</span><span>python-docx</span></div>
     </a>
 
-    <a class="item rv" href="https://github.com/Moses-Otu/AIspace/tree/main/n8n/opportunity-radar">
+    <a class="item rv" href="https://github.com/Moses-Otu/AIspace/tree/main/agentic-systems/opportunity-radar">
       <div class="item-top"><span class="num mono">02</span><span class="t">Opportunity Radar</span><span class="badge">12-stage pipeline</span><span class="badge">source</span><span class="arrow">→</span></div>
       <p class="d">Scans startup activity, abstracts each company into a transferable pattern, then grades it
       against a national policy corpus. pgvector retrieval pulls top-k evidence per document type, a knockout
       filter kills saturated or already-implemented ideas, and an eight-criterion weighted rubric scores what
       survives — with a confidence band derived from how much of the score is actually evidence-backed.</p>
-      <div class="stack"><span>n8n</span><span>Postgres + pgvector</span><span>text-embedding-3-small</span><span>GPT-5.5</span><span>Perplexity</span><span>Exa</span></div>
+      <div class="stack"><span>RAG</span><span>Postgres + pgvector</span><span>text-embedding-3-small</span><span>GPT-5.5</span><span>Perplexity</span><span>Exa</span></div>
     </a>
 
-    <a class="item rv" href="https://github.com/Moses-Otu/AIspace/tree/main/n8n/engagement-pulse">
+    <a class="item rv" href="https://github.com/Moses-Otu/AIspace/tree/main/agentic-systems/engagement-pulse">
       <div class="item-top"><span class="num mono">03</span><span class="t">Employee Engagement Pulse</span><span class="badge">full source</span><span class="arrow">→</span></div>
       <p class="d">A weekly wellbeing check-in that actually closes the loop: Friday dispatch, AI severity
       classification on each submission, routing to the right business partner, one-click “attended”
       confirmation, and a daily sweep that chases anything still open after two days.</p>
-      <div class="stack"><span>n8n</span><span>Information Extractor</span><span>Data tables</span><span>Gmail</span><span>Webhooks</span></div>
+      <div class="stack"><span>LLM classification</span><span>Structured extraction</span><span>Data tables</span><span>Gmail</span><span>Webhooks</span></div>
     </a>
 
-    <a class="item rv" href="https://github.com/Moses-Otu/AIspace/tree/main/n8n/rcm-builder">
+    <a class="item rv" href="https://github.com/Moses-Otu/AIspace/tree/main/agentic-systems/rcm-builder">
       <div class="item-top"><span class="num mono">04</span><span class="t">Risk &amp; Control Matrix Builder</span><span class="badge">full source</span><span class="arrow">→</span></div>
       <p class="d">Intake form for a new audit engagement pulls standing-corpus documents from Drive, calls a
       FastAPI service to generate a draft risk-and-control matrix, emails the workbook to a reviewer, and
       captures the approve / not-yet decision back into the pipeline.</p>
-      <div class="stack"><span>n8n</span><span>FastAPI</span><span>Google Drive</span><span>Gmail</span></div>
+      <div class="stack"><span>Document generation</span><span>FastAPI</span><span>Google Drive</span><span>Gmail</span></div>
     </a>
 
-    <a class="item rv" href="https://github.com/Moses-Otu/AIspace/tree/main/n8n/creatoros-content-pipeline">
+    <a class="item rv" href="https://github.com/Moses-Otu/AIspace/tree/main/agentic-systems/creatoros-content-pipeline">
       <div class="item-top"><span class="num mono">05</span><span class="t">CreatorOS</span><span class="badge">multi-agent</span><span class="badge">full source</span><span class="arrow">→</span></div>
       <p class="d">Research → write → edit → fact-check → SEO, as five agents with structured-output contracts
       instead of free text that has to be re-parsed downstream. Validation gates stop and alert on failure
       rather than cascading garbage, and publishing genuinely blocks on a Slack send-and-wait approval.</p>
-      <div class="stack"><span>n8n</span><span>LangChain agents</span><span>Structured output</span><span>Slack HITL</span><span>Hashnode GraphQL</span></div>
+      <div class="stack"><span>Multi-agent</span><span>LangChain agents</span><span>Structured output</span><span>Slack HITL</span><span>Hashnode GraphQL</span></div>
     </a>
 
-    <a class="item rv" href="https://github.com/Moses-Otu/AIspace/tree/main/n8n/media-clippings">
+    <a class="item rv" href="https://github.com/Moses-Otu/AIspace/tree/main/agentic-systems/media-clippings">
       <div class="item-top"><span class="num mono">06</span><span class="t">Automated Media Clippings</span><span class="arrow">→</span></div>
       <p class="d">Daily media monitoring: Brave search sweeps, an agent-driven selection sub-workflow that
       picks what matters, response forms for human curation, and a dedicated error handler so a bad source
       never silently drops a day of coverage.</p>
-      <div class="stack"><span>n8n</span><span>Brave Search</span><span>AI agents</span><span>Forms</span></div>
+      <div class="stack"><span>Web search</span><span>Brave Search</span><span>AI agents</span><span>Forms</span></div>
     </a>
 
-    <a class="item rv" href="https://github.com/Moses-Otu/AIspace/tree/main/n8n/lead-intelligence">
+    <a class="item rv" href="https://github.com/Moses-Otu/AIspace/tree/main/agentic-systems/lead-intelligence">
       <div class="item-top"><span class="num mono">07</span><span class="t">Lead Intelligence</span><span class="badge">source</span><span class="arrow">→</span></div>
       <p class="d">Landing-page form to qualified pipeline: AI enrichment and hot/warm/cold scoring, flattened
       to columns and upserted on email, with a chat agent on top for company research, vendor intelligence
       and financial signals.</p>
-      <div class="stack"><span>n8n</span><span>AI agents</span><span>Google Sheets</span><span>Enrichment APIs</span></div>
+      <div class="stack"><span>AI agents</span><span>Lead scoring</span><span>Google Sheets</span><span>Enrichment APIs</span></div>
     </a>
   </section>
 
@@ -406,9 +406,9 @@
     <a class="item rv" href="https://github.com/Moses-Otu/featurephone-ai">
       <div class="item-top"><span class="num mono">01</span><span class="t">FeaturePhone AI</span><span class="badge">live demo</span><span class="arrow">→</span></div>
       <p class="d">An AI assistant that works over USSD, so it reaches any phone with no data connection.
-      A TypeScript simulator drives an n8n runtime where weather, currency, calculator and time are modular
+      A TypeScript simulator drives an agent runtime where weather, currency, calculator and time are modular
       tools the model chooses between, with session-keyed memory for multi-turn dialogue.</p>
-      <div class="stack"><span>TypeScript</span><span>n8n</span><span>USSD</span><span>Tool calling</span><span>Vercel</span></div>
+      <div class="stack"><span>TypeScript</span><span>LLM agents</span><span>USSD</span><span>Tool calling</span><span>Vercel</span></div>
     </a>
 
     <a class="item rv" href="https://github.com/Moses-Otu/Like-I-am-5">
